@@ -1,1 +1,4 @@
 __pycache__/
+*.zip
+*.ini
+**/desktop.ini
