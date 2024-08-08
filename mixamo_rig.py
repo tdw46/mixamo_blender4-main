@@ -4,8 +4,8 @@ from math import *
 from mathutils import *
 from bpy.types import Panel, UIList
 from .utils import *
+from .utils import calculate_roll_difference, align_bone_to_axes
 from .define import *
-
 
 # OPERATOR CLASSES
 ##################
@@ -870,6 +870,12 @@ def _make_rig(self):
         thigh_ik = create_edit_bone(thigh_ik_name)
         copy_bone_transforms(thigh, thigh_ik)
 
+        # Calculate roll difference
+        roll_diff = calculate_roll_difference(thigh, thigh_ik)
+
+        # Apply the roll difference
+        thigh_ik.roll += roll_diff
+
         # auto-align knee position with global Y axis to ensure IK pole vector is physically correct
         leg_axis = calf.tail - thigh.head
         leg_midpoint = (thigh.head + calf.tail) * 0.5
@@ -925,13 +931,27 @@ def _make_rig(self):
         # ~ set_bone_layer(calf_ik, layer_intern_idx)
         set_bone_collection(rig, calf_ik, coll_intern_name)
 
+        # Calculate the expected orientation
+        leg_axis = calf_ik.tail - thigh_ik.head
+        expected_x_axis = leg_axis.cross(Vector((0, 0, 1)))
+        expected_y_axis = leg_axis.cross(expected_x_axis)
+
         # align thigh and calf IK roll
-            # align calf_ik local Z
-        align_bone_z_axis(calf_ik, (calf_ik.head-leg_midpoint))
-            # align thigh_ik on calf_ik
-        align_bone_z_axis(thigh_ik, calf_ik.z_axis)
-            # copy thigh_ik to c_thigh_fk
+        # Align thigh_ik to the expected orientation
+        align_bone_to_axes(thigh_ik, expected_x_axis, expected_y_axis)
+        # Align calf_ik to the expected orientation
+        align_bone_to_axes(calf_ik, expected_x_axis, expected_y_axis)
+        
+        # Update c_thigh_fk and c_calf_fk to match the new orientations
+        c_thigh_fk = get_edit_bone(c_prefix+leg_rig_names["thigh_fk"]+_side)
+        c_calf_fk = get_edit_bone(c_prefix+leg_rig_names["calf_fk"]+_side)
+        
+        # copy thigh_ik to c_thigh_fk
         copy_bone_transforms(thigh_ik, c_thigh_fk)
+        copy_bone_transforms(calf_ik, c_calf_fk)
+
+        # Apply the roll difference to the FK controller as well
+        c_thigh_fk.roll += roll_diff
 
 
         # Calf FK Ctrl
@@ -1712,11 +1732,16 @@ def _make_rig(self):
         arm_ik = create_edit_bone(arm_ik_name)
         copy_bone_transforms(arm, arm_ik)
 
+        # Calculate roll difference
+        roll_diff = calculate_roll_difference(arm, arm_ik)
+
+        # Apply the roll difference
+        arm_ik.roll += roll_diff
+
         # correct straight arms angle, need minimum 0.1 degrees for IK constraints to work
         angle_min = 0.1
 
         def get_arm_angle():
-            #return degrees(arm.y_axis.angle(forearm.y_axis))
             vec1 = forearm.head - arm.head
             vec2 = hand.head - forearm.head
             return degrees(vec1.angle(vec2))
@@ -1725,23 +1750,18 @@ def _make_rig(self):
 
         if arm_angle < angle_min:
             print("    ! Straight arm bones, angle = "+str(arm_angle))
-
             max_iter = 10000
             i = 0
-
             while arm_angle < angle_min and i < max_iter:
-
                 dir = ((arm.x_axis + forearm.x_axis)*0.5).normalized()
                 if side == "Right":
                     dir *= -1
-
                 forearm.head += dir * (forearm.tail-forearm.head).magnitude * 0.0001
                 arm_angle = get_arm_angle()
                 i += 1
-
             print("      corrected arm angle: "+str(arm_angle))
 
-        # auto-align knee position with global Y axis to ensure IK pole vector is physically correct
+        # auto-align elbow position with global Y axis to ensure IK pole vector is physically correct
         arm_axis = forearm.tail - arm.head
         arm_midpoint = (arm.head + forearm.tail) * 0.5
         #cur_vec = forearm.head - arm_midpoint
