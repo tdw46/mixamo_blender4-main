@@ -16,13 +16,16 @@ def get_object(name):
 
 
 def set_active_object(object_name):
-     bpy.context.view_layer.objects.active = bpy.data.objects[object_name]
-     bpy.data.objects[object_name].select_set(state=True)
+    bpy.context.view_layer.objects.active = bpy.data.objects[object_name]
+    bpy.data.objects[object_name].select_set(state=True)
 
 
 def hide_object(obj_to_set):
-    obj_to_set.hide_set(True)
-    obj_to_set.hide_viewport = True
+    if obj_to_set.name in bpy.context.view_layer.objects:
+        obj_to_set.hide_set(True)
+        obj_to_set.hide_viewport = True
+    else:
+        print(f"Warning: Object '{obj_to_set.name}' is not in the current View Layer.")
 
 
 def is_object_hidden(obj_to_get):

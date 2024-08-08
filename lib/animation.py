@@ -20,7 +20,11 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
             # IK poles
             if pbone.name.startswith("Ctrl_ArmPole") or pbone.name.startswith("Ctrl_LegPole"):
                 b1 = b2 = None
-                src_arm = ik_data["src_arm"]
+                src_arm = ik_data.get("src_arm")
+                if src_arm is None:
+                    print("Error: src_arm not found in ik_data")
+                    continue
+                
                 type = ""
                 if "Leg" in pbone.name:
                     type = "Leg"                    
@@ -28,32 +32,55 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     type = "Arm"
                     
                 name_split = pbone.name.split('_')
-                side = name_split[len(name_split)-1]
-                b1_name = ik_data[type+side][0]
-                b2_name = ik_data[type+side][1]
+                side = name_split[-1]
+                
+                if type+side not in ik_data:
+                    print(f"Error: {type+side} not found in ik_data")
+                    continue
+                
+                b1_name, b2_name = ik_data[type+side]
                 b1 = src_arm.pose.bones.get(b1_name)
                 b2 = src_arm.pose.bones.get(b2_name)
                 
-                _axis = None
-                if type == "Leg":
-                    _axis = (b1.z_axis*0.5) + (b2.z_axis*0.5)#b1.z_axis#
-                elif type == "Arm":
-                    if side == "Left":
-                        _axis = b2.x_axis
-                    elif side == "Right":
-                        _axis = -b2.x_axis
+                if b1 is None:
+                    print(f"Error: Bone {b1_name} not found")
+                if b2 is None:
+                    print(f"Error: Bone {b2_name} not found")
                 
-                pole_pos = get_ik_pole_pos(b1, b2, method=2, axis=_axis)
-                #pole_pos = b2.head + (b2.z_axis.normalized() * (b2.tail-b2.head).magnitude)
-                bmat = Matrix.Translation(pole_pos)
-                
-                # Child Of constraints are preserved after baking
-                # need to compensate the matrix with the Child Of transformation
-                child_of_cns = pbone.constraints.get("Child Of")
-                if child_of_cns:     
-                    if child_of_cns.influence == 1.0 and child_of_cns.mute == False:
-                        bmat = get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted() @ bmat
+                if b1 and b2:
+                    _axis = None
+                    if type == "Leg":
+                        _axis = (b1.z_axis*0.5) + (b2.z_axis*0.5)
+                    elif type == "Arm":
+                        if side == "Left":
+                            _axis = b2.x_axis
+                        elif side == "Right":
+                            _axis = -b2.x_axis
                     
+                    try:
+                        pole_pos = get_ik_pole_pos(b1, b2, method=2, axis=_axis)
+                        bmat = Matrix.Translation(pole_pos)
+                    except AttributeError as e:
+                        print(f"Error in get_ik_pole_pos: {str(e)}")
+                        continue
+                    
+                    # Child Of constraints are preserved after baking
+                    # need to compensate the matrix with the Child Of transformation
+                    child_of_cns = pbone.constraints.get("Child Of")
+                    if child_of_cns:
+                        if child_of_cns.subtarget:
+                            if child_of_cns.influence == 1.0 and not child_of_cns.mute:
+                                subtarget_bone = armature.pose.bones.get(child_of_cns.subtarget)
+                                if subtarget_bone:
+                                    bmat = subtarget_bone.matrix_channel.inverted() @ bmat
+                                else:
+                                    print(f"Subtarget bone not found: {child_of_cns.subtarget}")
+                    else:
+                        print(f"No Child Of constraint found for {pbone.name}")
+                else:
+                    print(f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}")
+                    continue
+            
             matrix[pbone.name] = armature.convert_space(pose_bone=pbone, matrix=bmat, from_space="POSE", to_space="LOCAL") 
             
         return matrix

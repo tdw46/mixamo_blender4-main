@@ -8,26 +8,24 @@ def set_bone_collection(armt, databone, coll_name, multi=False):
     if databone is None:
         return
 
-    armt = armt.data
+    armt_data = armt.data if hasattr(armt, 'data') else armt
 
-    coll = None
-    for c in armt.collections:
-        if c.name == coll_name:
-            coll = c
-            break
-
+    coll = armt_data.collections.get(coll_name)
     if coll is None:
-        coll = armt.collections.new(coll_name)
+        coll = armt_data.collections.new(coll_name)
 
     colls_to_remove_from = None
     if not multi:
-        colls_to_remove_from = [c for c in databone.collections]
+        colls_to_remove_from = list(databone.collections)
 
-    r = coll.assign(databone)
+    coll.assign(databone)
 
     if colls_to_remove_from is not None:
         for c in colls_to_remove_from:
-            c.unassign(databone)
+            if c != coll:
+                c.unassign(databone)
+
+    return coll
 
     # ~ databone.layers[layer_idx] = True
 

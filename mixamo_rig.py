@@ -451,20 +451,20 @@ def clean_scene():
     cs_grp = get_object("cs_grp")
     if cs_grp:
         for c in cs_grp.children:
-            hide_object(c)
-        hide_object(cs_grp)
-
-    # Display layer 0 and 1 only
-    # ~ layers = bpy.context.active_object.data.layers
-    # ~ layers[0] = True
-    # ~ for i in range(0, 32):
-        # ~ layers[i] = i in [0]
-
-    for c in bpy.context.active_object.data.collections:
-        if c.name in ('CTRL'):
-            c.is_visible = True
+            if c.name in bpy.context.view_layer.objects:
+                hide_object(c)
+            else:
+                print(f"Warning: Object '{c.name}' is not in the current View Layer.")
+        
+        if cs_grp.name in bpy.context.view_layer.objects:
+            hide_object(cs_grp)
         else:
-            c.is_visible = False
+            print(f"Warning: Object 'cs_grp' is not in the current View Layer.")
+
+    active_object = bpy.context.active_object
+    if active_object and active_object.type == 'ARMATURE':
+        for c in active_object.data.collections:
+            c.is_visible = (c.name == 'CTRL')
 
 
 def init_armature_transforms(rig):
@@ -535,16 +535,14 @@ def _make_rig(self):
     coll_ctrl_name = "CTRL"
     coll_intern_name = "MCH"
 
-    # ~ _ = rig.data.collections.new(coll_0_name)
-    # ~ for eb in rig.data.edit_bones:
-        # ~ set_bone_collection(rig, eb, coll_0_name)
+    # Create collections if they don't exist
+    for coll_name in [coll_mix_name, coll_ctrl_name, coll_intern_name]:
+        if not rig.data.collections.get(coll_name):
+            rig.data.collections.new(coll_name)
 
-    # ~ layer_mix_idx = 1
-    # ~ layer_ctrl_idx = 0
-    # ~ layer_intern_idx = 8
     use_name_prefix = True
 
-    c_master_name = c_prefix+master_rig_names["master"]
+    c_master_name = c_prefix + master_rig_names["master"]
 
     # Init transforms
     init_armature_transforms(rig)
@@ -556,31 +554,47 @@ def _make_rig(self):
         # -- Edit --
         bpy.ops.object.mode_set(mode='EDIT')
 
-
         # Create bones
         c_master = create_edit_bone(c_master_name)
         c_master.head = [0, 0, 0]
         c_master.tail = [0, 0, 0.05 * rig.dimensions[2]]
         c_master.roll = 0.01
-        set_bone_collection(rig, c_master, coll_ctrl_name)
-        # ~ set_bone_layer(c_master, layer_ctrl_idx)
-        c_master["mixamo_ctrl"] = 1# tag as controller bone
+        
+        # Use the new collection system
+        ctrl_collection = rig.data.collections.get(coll_ctrl_name)
+        if not ctrl_collection:
+            ctrl_collection = rig.data.collections.new(coll_ctrl_name)
+        ctrl_collection.assign(c_master)
+        
+        c_master["mixamo_ctrl"] = 1  # tag as controller bone
 
+        # Create Ctrl_Hips bone
+        c_hips = create_edit_bone("Ctrl_Hips")
+        c_hips.head = [0, 0, 0]
+        c_hips.tail = [0, 0, 0.05 * rig.dimensions[2]]
+        c_hips.roll = 0.01
+        c_hips.parent = c_master
+        ctrl_collection.assign(c_hips)
+        c_hips["mixamo_ctrl"] = 1
 
         # -- Pose --
         bpy.ops.object.mode_set(mode='POSE')
 
-
         c_master_pb = get_pose_bone(c_master_name)
+        c_hips_pb = get_pose_bone("Ctrl_Hips")
 
         # set custom shapes
         set_bone_custom_shape(c_master_pb, "cs_master")
+        set_bone_custom_shape(c_hips_pb, "cs_circle")
 
         # set rotation mode
         c_master_pb.rotation_mode = "XYZ"
+        c_hips_pb.rotation_mode = "XYZ"
 
         # set color group
         set_bone_color_group(rig, c_master_pb, "master")
+        set_bone_color_group(rig, c_hips_pb, "root_master")
+
 
 
     def add_spine():
