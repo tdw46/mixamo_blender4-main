@@ -1,4 +1,9 @@
+# Other common Python/Blender ignores
 __pycache__/
-*.zip
-*.ini
-**/desktop.ini
+*.py[cod]
+*$py.class
+.vscode/
+.idea/
+*.blend1
+*.blend2
+*.blend3
