@@ -1,23 +1,22 @@
 schema_version = "1.0.0"
 
-id = "mixamo_rig_for_blender_4"
+id = "mixamo_rig_for_blender"
 version = "1.0.0"
-name = "Mixamo Rig for Blender 4.0"
+name = "Mixamo Rig for Blender"
 tagline = "Generate a control rig from Mixamo Fbx skeleton"
 maintainer = "BeyondDev (Tyler Walker) <tyler@beyondstudios.us>"
 type = "add-on"
 
-blender_version_min = "4.2.0"
-
-license = [
-  "SPDX:GPL-2.0-or-later",
-]
-
-tags = ["Animation"]
-
-
-register = "register"
-unregister = "unregister"
-
-
 website = "https://github.com/tdw46/mixamo_blender4-main/tree/main"
+
+tags = ["Import-Export", "Animation", "Modeling"]
+
+blender_version_min = "2.93.0"
+blender_version_max = "4.2.999"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+copyright = [
+  "2024 Adobe, Tyler Walker",
+  "2021 Adobe",
+]

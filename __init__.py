@@ -19,20 +19,21 @@
 
 
 bl_info = {
-    "name": "Mixamo Rig for Blender 4.0",
+    "name": "Mixamo Rig for Blender",
     "author": "Mixamo - Xin + BeyondDev",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (4, 0, 0),
     "location": "3D View > Mixamo> Control Rig",
     "description": "Generate a control rig from the selected Mixamo Fbx skeleton",
     "category": "Animation",
     "doc_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
-    "tracker_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main"
+    "tracker_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
 }
 
 
 if "bpy" in locals():
     import importlib
+
     if "mixamo_rig_prefs" in locals():
         importlib.reload(mixamo_rig_prefs)
     if "mixamo_rig" in locals():
@@ -51,15 +52,18 @@ from . import mixamo_rig
 from . import mixamo_rig_functions
 from . import utils
 
+
 def register():
     mixamo_rig_prefs.register()
     mixamo_rig.register()
     mixamo_rig_functions.register()
 
+
 def unregister():
     mixamo_rig_prefs.unregister()
     mixamo_rig.unregister()
     mixamo_rig_functions.unregister()
+
 
 if __name__ == "__main__":
     register()
