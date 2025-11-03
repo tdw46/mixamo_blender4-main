@@ -8,7 +8,8 @@ def restore_armature_layers(layers_select):
         if c.name in layers_select:
             c.is_visible = layers_select[c.name]
         else:
-            c.is_visible = False
+            if c.name == "CTRL":
+                c.is_visible = True
 
 
 def enable_all_armature_layers():

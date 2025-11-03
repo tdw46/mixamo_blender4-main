@@ -2,6 +2,7 @@ import bpy
 from .maths_geo import *
 from .bones_pose import *
 from .version import *
+from . import animation_compat
 
 def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True, bake_object=False, ik_data=None):
     scn = bpy.context.scene
@@ -105,10 +106,10 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
         if bake_object:
             obj_data.append((f, get_obj_matrix()))
 
-    # set new action
+    # set new action (compatible with both legacy and slotted actions)
     action = bpy.data.actions.new("Action")
     anim_data = armature.animation_data_create()
-    anim_data.action = action
+    animation_compat.assign_action_to_animdata(anim_data, action, armature)
 
     def store_keyframe(bn, prop_type, fc_array_index, fra, val):
         fc_data_path = 'pose.bones["' + bn + '"].' + prop_type
@@ -170,12 +171,14 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     store_keyframe(pb.name, "scale", arr_idx, f, value)
                     
             
-            # Add keyframes
+            # Add keyframes (compatible with both legacy and slotted actions)
+            # Get fcurves collection once outside the loop to avoid issues
+            action_fcurves = animation_compat.get_action_fcurves(action)
             for fc_key, key_values in keyframes.items():
                 data_path, index = fc_key
-                fcurve = action.fcurves.find(data_path=data_path, index=index)
+                fcurve = action_fcurves.find(data_path=data_path, index=index)
                 if fcurve == None:
-                    fcurve = action.fcurves.new(data_path, index=index, action_group=pb.name)
+                    fcurve = action_fcurves.new(data_path, index=index, action_group=pb.name)
 
                 num_keys = len(key_values) // 2
                 fcurve.keyframe_points.add(num_keys)

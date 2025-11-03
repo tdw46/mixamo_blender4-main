@@ -41,9 +41,15 @@ def lock_pbone_transform(pbone, type, list):
 
 def set_bone_custom_shape(pbone, cs_name):
     cs = get_object(cs_name)
-    if cs == None:
+    if cs is None:
         append_cs(cs_name)
         cs = get_object(cs_name)
+        if cs is None:
+            # try to find a suffixed name like cs_name.001 if Blender renamed on link
+            for obj in bpy.data.objects:
+                if obj.name == cs_name or obj.name.startswith(cs_name + "."):
+                    cs = obj
+                    break
 
     pbone.custom_shape = cs
 

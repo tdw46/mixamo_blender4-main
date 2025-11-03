@@ -1,10 +1,11 @@
-import bpy, sys, linecache, ast
+import bpy
 import math
 from math import *
 from mathutils import *
 from bpy.types import Panel, UIList
 from .utils import *
 from .define import *
+from .lib import animation_compat
 
 
 # OPERATOR CLASSES
@@ -466,10 +467,19 @@ def clean_scene():
         else:
             print(f"Warning: Object 'cs_grp' is not in the current View Layer.")
 
-    active_object = bpy.context.active_object
-    if active_object and active_object.type == "ARMATURE":
-        for c in active_object.data.collections:
-            c.is_visible = c.name == "CTRL"
+    # Always show custom shapes and set collection visibility
+    if bpy.context.object and bpy.context.object.type == "ARMATURE":
+        bpy.context.object.data.show_bone_custom_shapes = True
+        
+        # Set bone collection visibility - only CTRL visible
+        # Use .collections instead of .collections_all for safe property assignment
+        for coll in bpy.context.object.data.collections:
+            if coll.name == "DEF":
+                coll.is_visible = False
+            elif coll.name == "MCH":
+                coll.is_visible = False
+            elif coll.name == "CTRL":
+                coll.is_visible = True
 
 
 def init_armature_transforms(rig):
@@ -534,6 +544,39 @@ def _make_rig(self):
     rig_name = bpy.context.active_object.name
     rig = get_object(rig_name)
 
+    # Preload all custom shape objects in a single, safe place to avoid appending
+    # while rapidly switching modes during rig construction.
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    try:
+        shape_names = [
+            "cs_master",
+            "cs_circle",
+            "cs_square_2",
+            "cs_hips",
+            "cs_neck",
+            "cs_head",
+            "cs_thigh_fk",
+            "cs_calf_fk",
+            "cs_foot",
+            "cs_sphere_012",
+            "cs_foot_roll",
+            "cs_foot_01",
+            "cs_toe",
+            "cs_shoulder_left",
+            "cs_shoulder_right",
+            "cs_arm_fk",
+            "cs_forearm_fk",
+            "cs_hand",
+            "cs_circle_025",
+        ]
+        append_cs(shape_names)
+    except Exception:
+        # Fallback silently; set_bone_custom_shape will try best-effort lookups
+        pass
+
     coll_mix_name = "DEF"
     coll_ctrl_name = "CTRL"
     coll_intern_name = "MCH"
@@ -568,7 +611,6 @@ def _make_rig(self):
             ctrl_collection = rig.data.collections.new(coll_ctrl_name)
         ctrl_collection.assign(c_master)
 
-        c_master["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Create Ctrl_Hips bone
         c_hips = create_edit_bone("Ctrl_Hips")
@@ -577,13 +619,17 @@ def _make_rig(self):
         c_hips.roll = 0.01
         c_hips.parent = c_master
         ctrl_collection.assign(c_hips)
-        c_hips["mixamo_ctrl"] = 1
+
 
         # -- Pose --
         bpy.ops.object.mode_set(mode="POSE")
 
         c_master_pb = get_pose_bone(c_master_name)
         c_hips_pb = get_pose_bone("Ctrl_Hips")
+
+        # tag controller bones on Bone datablock (not EditBone) to avoid crashes
+        c_master_pb.bone["mixamo_ctrl"] = 1
+        c_hips_pb.bone["mixamo_ctrl"] = 1
 
         # set custom shapes
         set_bone_custom_shape(c_master_pb, "cs_master")
@@ -629,7 +675,7 @@ def _make_rig(self):
         c_hips.parent = get_edit_bone(c_prefix + master_rig_names["master"])
         set_bone_collection(rig, c_hips, coll_ctrl_name)
         # ~ set_bone_layer(c_hips, layer_ctrl_idx)
-        c_hips["mixamo_ctrl"] = 1  # tag as controller bone
+        
 
         # Free Hips Ctrl
         c_hips_free_name = c_prefix + spine_rig_names["hips_free"]
@@ -637,7 +683,7 @@ def _make_rig(self):
         c_hips_free.head = hips.tail.copy()
         c_hips_free.tail = hips.head.copy()
         align_bone_x_axis(c_hips_free, hips.x_axis)
-        c_hips_free["mixamo_ctrl"] = 1  # tag as controller bone
+        
 
         c_hips_free.parent = c_hips
         set_bone_collection(rig, c_hips_free, coll_ctrl_name)
@@ -658,7 +704,7 @@ def _make_rig(self):
         c_spine.parent = c_hips
         # ~ set_bone_layer(c_spine, layer_ctrl_idx)
         set_bone_collection(rig, c_spine, coll_ctrl_name)
-        c_spine["mixamo_ctrl"] = 1  # tag as controller bone
+        
 
         # Spine1 Ctrl
         c_spine1_name = c_prefix + spine_rig_names["spine2"]
@@ -667,7 +713,7 @@ def _make_rig(self):
         c_spine1.parent = c_spine
         set_bone_collection(rig, c_spine1, coll_ctrl_name)
         # ~ set_bone_layer(c_spine1, layer_ctrl_idx)
-        c_spine1["mixamo_ctrl"] = 1  # tag as controller bone
+        
 
         # Spine2 Ctrl
         c_spine2_name = c_prefix + spine_rig_names["spine3"]
@@ -676,7 +722,7 @@ def _make_rig(self):
         c_spine2.parent = c_spine1
         set_bone_collection(rig, c_spine2, coll_ctrl_name)
         # ~ set_bone_layer(c_spine2, layer_ctrl_idx)
-        c_spine2["mixamo_ctrl"] = 1  # tag as controller bone
+        
 
         # -- Pose --
         bpy.ops.object.mode_set(mode="POSE")
@@ -687,6 +733,10 @@ def _make_rig(self):
         c_spine_pb = get_pose_bone(c_spine_name)
         c_spine1_pb = get_pose_bone(c_spine1_name)
         c_spine2_pb = get_pose_bone(c_spine2_name)
+
+        # tag controller bones on Bone datablock (not EditBone)
+        for pb in [c_hips_pb, c_hips_free_pb, c_spine_pb, c_spine1_pb, c_spine2_pb]:
+            pb.bone["mixamo_ctrl"] = 1
 
         # set custom shapes
         set_bone_custom_shape(c_hips_pb, "cs_square_2")
@@ -762,7 +812,6 @@ def _make_rig(self):
         c_neck.parent = get_edit_bone(c_prefix + spine_rig_names["spine3"])
         # ~ set_bone_layer(c_neck, layer_ctrl_idx)
         set_bone_collection(rig, c_neck, coll_ctrl_name)
-        c_neck["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Head Ctrl
         c_head_name = c_prefix + head_rig_names["head"]
@@ -771,13 +820,16 @@ def _make_rig(self):
         c_head.parent = c_neck
         # ~ set_bone_layer(c_head, layer_ctrl_idx)
         set_bone_collection(rig, c_head, coll_ctrl_name)
-        c_head["mixamo_ctrl"] = 1  # tag as controller bone
 
         # -- Pose --
         bpy.ops.object.mode_set(mode="POSE")
 
         c_neck_pb = get_pose_bone(c_neck_name)
         c_head_pb = get_pose_bone(c_head_name)
+
+        # tag controller bones on Bone datablock (not EditBone)
+        c_neck_pb.bone["mixamo_ctrl"] = 1
+        c_head_pb.bone["mixamo_ctrl"] = 1
 
         # set custom shapes
         set_bone_custom_shape(c_neck_pb, "cs_neck")
@@ -898,7 +950,6 @@ def _make_rig(self):
         c_thigh_fk.parent = c_hips_free
         # ~ set_bone_layer(c_thigh_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_thigh_fk, coll_ctrl_name)
-        c_thigh_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Calf IK
         calf_ik_name = leg_rig_names["calf_ik"] + _side
@@ -931,7 +982,6 @@ def _make_rig(self):
         c_calf_fk.parent = c_thigh_fk
         set_bone_collection(rig, c_calf_fk, coll_ctrl_name)
         # ~ set_bone_layer(c_calf_fk, layer_ctrl_idx)
-        c_calf_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Foot FK Ctrl
         c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
@@ -942,7 +992,6 @@ def _make_rig(self):
         c_foot_fk.parent = c_calf_fk
         # ~ set_bone_layer(c_foot_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_foot_fk, coll_ctrl_name)
-        c_foot_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Foot FK
         foot_fk_name = leg_rig_names["foot_fk"] + _side
@@ -960,7 +1009,6 @@ def _make_rig(self):
         align_bone_z_axis(c_foot_ik, Vector((0, 0, 1)))
         set_bone_collection(rig, c_foot_ik, coll_ctrl_name)
         # ~ set_bone_layer(c_foot_ik, layer_ctrl_idx)
-        c_foot_ik["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Foot IK
         foot_ik_name = leg_rig_names["foot_ik"] + _side
@@ -1067,7 +1115,6 @@ def _make_rig(self):
         c_foot_01.parent = toes_end
         # ~ set_bone_layer(c_foot_01, layer_ctrl_idx)
         set_bone_collection(rig, c_foot_01, coll_ctrl_name)
-        c_foot_01["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Foot_ik_target parent
         foot_ik_target.parent = c_foot_01
@@ -1093,7 +1140,6 @@ def _make_rig(self):
         c_toe_ik.parent = toes_end
         # ~ set_bone_layer(c_toe_ik, layer_ctrl_idx)
         set_bone_collection(rig, c_toe_ik, coll_ctrl_name)
-        c_toe_ik["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Toe Track
         toe_track_name = leg_rig_names["toes_track"] + _side
@@ -1128,7 +1174,6 @@ def _make_rig(self):
         c_toe_fk.parent = foot_fk
         # ~ set_bone_layer(c_toe_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_toe_fk, coll_ctrl_name)
-        c_toe_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Foot Roll Cursor Ctrl
         c_foot_roll_cursor_name = c_prefix + leg_rig_names["foot_roll_cursor"] + _side
@@ -1141,14 +1186,12 @@ def _make_rig(self):
         c_foot_roll_cursor.parent = c_foot_ik
         # ~ set_bone_layer(c_foot_roll_cursor, layer_ctrl_idx)
         set_bone_collection(rig, c_foot_roll_cursor, coll_ctrl_name)
-        c_foot_roll_cursor["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Pole IK Ctrl
         c_pole_ik_name = c_prefix + leg_rig_names["pole_ik"] + _side
         c_pole_ik = create_edit_bone(c_pole_ik_name)
         # ~ set_bone_layer(c_pole_ik, layer_ctrl_idx)
         set_bone_collection(rig, c_pole_ik, coll_ctrl_name)
-        c_pole_ik["mixamo_ctrl"] = 1  # tag as controller bone
 
         plane_normal = thigh_ik.head - calf_ik.tail
         prepole_dir = calf_ik.head - leg_midpoint
@@ -1649,6 +1692,10 @@ def _make_rig(self):
             c_toe_ik_pb,
         ]
 
+        # tag controller bones on Bone datablock (not EditBone)
+        for pb in c_pbones_list:
+            pb.bone["mixamo_ctrl"] = 1
+
         # Set custom shapes
         set_bone_custom_shape(c_thigh_fk_pb, "cs_thigh_fk")
         set_bone_custom_shape(c_calf_fk_pb, "cs_calf_fk")
@@ -1698,6 +1745,9 @@ def _make_rig(self):
             # set color group
             set_bone_color_group(rig, pb, "body" + _side.lower())
 
+        # Slight bend to avoid singularities
+        add_slight_bend(calf_ik, Vector((1, 0, 0)))  # +X axis for both legs
+
     def add_arm(side):
         print("  Add Arm", side)
         _side = "_" + side
@@ -1742,7 +1792,6 @@ def _make_rig(self):
                 copy_bone_transforms(finger, c_finger)
                 # ~ set_bone_layer(c_finger, 0)
                 set_bone_collection(rig, c_finger, coll_ctrl_name)
-                c_finger["mixamo_ctrl"] = 1  # tag as controller bone
 
                 if i == 1:
                     c_finger.parent = hand
@@ -1769,7 +1818,6 @@ def _make_rig(self):
         c_shoulder.parent = get_edit_bone(c_prefix + spine_rig_names["spine3"])
         # ~ set_bone_layer(c_shoulder, layer_ctrl_idx)
         set_bone_collection(rig, c_shoulder, coll_ctrl_name)
-        c_shoulder["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Arm IK
         arm_ik_name = arm_rig_names["arm_ik"] + _side
@@ -1851,7 +1899,6 @@ def _make_rig(self):
         copy_bone_transforms(arm_ik, c_arm_fk)
         # ~ set_bone_layer(c_arm_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_arm_fk, coll_ctrl_name)
-        c_arm_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # ForeArm IK
         forearm_ik_name = arm_rig_names["forearm_ik"] + _side
@@ -1883,14 +1930,12 @@ def _make_rig(self):
         c_forearm_fk.parent = c_arm_fk
         # ~ set_bone_layer(c_forearm_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_forearm_fk, coll_ctrl_name)
-        c_forearm_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Pole IK Ctrl
         c_pole_ik_name = c_prefix + arm_rig_names["pole_ik"] + _side
         c_pole_ik = create_edit_bone(c_pole_ik_name)
         # ~ set_bone_layer(c_pole_ik, layer_ctrl_idx)
         set_bone_collection(rig, c_pole_ik, coll_ctrl_name)
-        c_pole_ik["mixamo_ctrl"] = 1  # tag as controller bone
 
         arm_midpoint = (arm_ik.head + forearm_ik.tail) * 0.5
 
@@ -1919,7 +1964,6 @@ def _make_rig(self):
         # ~ set_bone_layer(c_hand_ik, layer_ctrl_idx)
         set_bone_collection(rig, c_hand_ik, coll_ctrl_name)
         copy_bone_transforms(hand, c_hand_ik)
-        c_hand_ik["mixamo_ctrl"] = 1  # tag as controller bone
 
         # Hand FK Ctrl
         c_hand_fk_name = c_prefix + arm_rig_names["hand_fk"] + _side
@@ -1928,7 +1972,6 @@ def _make_rig(self):
         c_hand_fk.parent = c_forearm_fk
         # ~ set_bone_layer(c_hand_fk, layer_ctrl_idx)
         set_bone_collection(rig, c_hand_fk, coll_ctrl_name)
-        c_hand_fk["mixamo_ctrl"] = 1  # tag as controller bone
 
         # ---- Pose ----
         bpy.ops.object.mode_set(mode="POSE")
@@ -1970,6 +2013,12 @@ def _make_rig(self):
 
         forearm_ik_pb.lock_ik_y = True
         forearm_ik_pb.lock_ik_x = True
+
+        # Add Slight bend to arms to avoid singularity
+        if side == "Left":
+            add_slight_bend(forearm_ik, Vector((0, 0, -1)))  # -Z axis for left
+        else:  # Right
+            add_slight_bend(forearm_ik, Vector((0, 0, 1)))  # +Z axis for right
 
         # Pole IK Ctrl
         cns_name = "Child Of"
@@ -2144,6 +2193,10 @@ def _make_rig(self):
             c_hand_ik_pb,
         ] + c_fingers_pb
 
+        # tag controller bones on Bone datablock (not EditBone)
+        for pb in c_pbones_list:
+            pb.bone["mixamo_ctrl"] = 1
+
         # set custom shape drivers
         ik_controls_names = [c_pole_ik_name, c_hand_ik_name]
 
@@ -2179,6 +2232,14 @@ def _make_rig(self):
     add_leg("Left")
     add_leg("Right")
 
+    # Ensure eye bones are in DEF collection
+    bpy.ops.object.mode_set(mode="EDIT")
+    eye_bone_names = ["RightEye", "LeftEye"]
+    for eye_name in eye_bone_names:
+        eye_bone = rig.data.edit_bones.get(eye_name)
+        if eye_bone:
+            set_bone_collection(rig, eye_bone, coll_mix_name)
+
     # tag the armature with a custom prop to specify the control rig is built
     rig.data["mr_control_rig"] = True
 
@@ -2189,15 +2250,15 @@ def _zero_out():
     arm = bpy.data.objects.get(bpy.context.active_object.name)
 
     print("  Clear anim")
-    # Clear animation data
+    # Clear animation data (compatible with both legacy and slotted actions)
     action = None
     if arm.animation_data:
-        if arm.animation_data.action:
-            action = arm.animation_data.action
+        action = animation_compat.get_action_from_animdata(arm.animation_data)
 
     if action:
-        while len(action.fcurves):
-            action.fcurves.remove(action.fcurves[0])
+        action_fcurves = animation_compat.get_action_fcurves(action)
+        while len(action_fcurves):
+            action_fcurves.remove(action_fcurves[0])
 
     print("  Clear pose")
     # Reset pose
@@ -2248,13 +2309,14 @@ def _bake_anim(self):
         print("No NLA tracks found, exit")
         return
 
-    # get active action frame range
-    act = rig.animation_data.action
+    # get active action frame range (compatible with both legacy and slotted actions)
+    act = animation_compat.get_action_from_animdata(rig.animation_data) if rig.animation_data else None
     if act is not None:
-        if act.frame_range[0] < fs:
-            fs = act.frame_range[0]
-        if act.frame_range[1] > fe:
-            fe = act.frame_range[1]
+        frame_range = animation_compat.get_action_frame_range(act)
+        if frame_range[0] < fs:
+            fs = frame_range[0]
+        if frame_range[1] > fe:
+            fe = frame_range[1]
 
     # select only controllers bones
     bpy.ops.object.mode_set(mode="POSE")
@@ -2314,7 +2376,10 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
     src_arm_loc = src_arm.location.copy()
     src_arm.location = [0, 0, 0]
-    fr_range = src_arm.animation_data.action.frame_range
+    
+    # Get frame range using compatibility function
+    src_action = animation_compat.get_action_from_animdata(src_arm.animation_data)
+    fr_range = animation_compat.get_action_frame_range(src_action)
     fr_start = int(fr_range[0])
     fr_end = int(fr_range[1])
 
@@ -2423,6 +2488,17 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     print("  Source armature rest pose redefined.")
 
 
+def add_slight_bend(bone, axis, angle=0.01):
+    # Convert degrees to radians
+    angle_rad = math.radians(angle)
+
+    # Create a rotation matrix for a slight rotation around the specified axis
+    rot_mat = Matrix.Rotation(angle_rad, 4, axis)
+
+    # Apply the rotation to the bone's matrix
+    bone.matrix = bone.matrix @ rot_mat
+
+
 def _import_anim(src_arm, tar_arm, import_only=False):
     print("\nImporting animation...")
     scn = bpy.context.scene
@@ -2431,11 +2507,15 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         print("  No action found on the source armature")
         return
 
-    if src_arm.animation_data.action == None:
+    # Use compatibility function to get action
+    src_action_check = animation_compat.get_action_from_animdata(src_arm.animation_data)
+    if src_action_check == None:
         print("  No action found on the source armature")
         return
 
-    if len(src_arm.animation_data.action.fcurves) == 0:
+    # Check for F-Curves using compatibility function
+    src_fcurves = animation_compat.get_action_fcurves(src_action_check)
+    if len(src_fcurves) == 0:
         print("  No keyframes to import")
         return
 
@@ -2623,12 +2703,6 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             c_prefix + "Toe_IK_Right"
         )
 
-    action = None
-    if src_arm.animation_data == None:
-        print("  No action found on the source armature")
-    if src_arm.animation_data.action == None:
-        print("  No action found on the source armature")
-
     # Work on a source armature duplicate
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.object.select_all(action="DESELECT")
@@ -2637,13 +2711,45 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     duplicate_object()
     src_arm_copy_name = src_arm.name + "_COPY"
     bpy.context.active_object.name = src_arm_copy_name
-    src_arm = get_object(src_arm_copy_name)
-    src_arm["mix_to_del"] = True
+    src_arm_copy = get_object(src_arm_copy_name)
+    src_arm_copy["mix_to_del"] = True
 
-    # Get anim data
-    action = src_arm.animation_data.action
-    fr_start = int(action.frame_range[0])
-    fr_end = int(action.frame_range[1])
+    # Get anim data - handle both active actions and NLA strips
+    # Compatible with both legacy and slotted actions (4.4+)
+    action = None
+    action_src_anim_data = None
+    
+    if src_arm_copy.animation_data:
+        action_src_anim_data = src_arm_copy.animation_data
+        action = animation_compat.get_action_from_animdata(action_src_anim_data)
+        
+        if action is None and len(action_src_anim_data.nla_tracks) > 0:
+            # Try to get action from NLA tracks
+            for track in action_src_anim_data.nla_tracks:
+                if not track.mute and len(track.strips) > 0:
+                    action = animation_compat.get_action_from_nla_strip(track.strips[0])
+                    if action:
+                        # Set as active action for processing (handles slots in 4.4+)
+                        animation_compat.assign_action_to_animdata(
+                            action_src_anim_data, 
+                            action, 
+                            src_arm_copy
+                        )
+                        break
+    
+    if action is None:
+        print("  ERROR: No action found on the source armature (neither active action nor NLA strips)")
+        # Clean up the duplicate
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        set_active_object(src_arm_copy_name)
+        bpy.ops.object.delete()
+        return
+    
+    # Get frame range using compatibility function
+    frame_range = animation_compat.get_action_frame_range(action)
+    fr_start = int(frame_range[0])
+    fr_end = int(frame_range[1])
 
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.object.select_all(action="DESELECT")
@@ -2690,11 +2796,14 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.object.select_all(action="DESELECT")
 
-    set_active_object(src_arm.name)
+    set_active_object(src_arm_copy.name)
 
-    scale_fac = src_arm.scale[0]
+    scale_fac = src_arm_copy.scale[0]
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
-    for fc in action.fcurves:
+    
+    # Get F-Curves using compatibility function (works with both legacy and slotted actions)
+    action_fcurves = animation_compat.get_action_fcurves(action)
+    for fc in action_fcurves:
         dp = fc.data_path
         if dp.startswith("pose.bones") and dp.endswith(".location"):
             for k in fc.keyframe_points:
@@ -2727,7 +2836,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         # set constraints
     bpy.ops.object.mode_set(mode="POSE")
 
-    bake_ik_data = {"src_arm": src_arm}
+    bake_ik_data = {"src_arm": src_arm_copy}
 
     for b in ik_bones_data:
         type, side, ik_bones = ik_bones_data[b]
@@ -2753,12 +2862,12 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
         cns = b1_pb.constraints.new("COPY_TRANSFORMS")
         cns.name = "Copy Transforms"
-        cns.target = src_arm
+        cns.target = src_arm_copy
         cns.subtarget = chain[0]
 
         cns = b2_pb.constraints.new("COPY_TRANSFORMS")
         cns.name = "Copy Transforms"
-        cns.target = src_arm
+        cns.target = src_arm_copy
         cns.subtarget = chain[1]
 
     # Retarget
@@ -2773,7 +2882,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
             for src_name in bones_map:
                 tar_name = bones_map[src_name]
-                src_bone = src_arm.pose.bones.get(src_name)
+                src_bone = src_arm_copy.pose.bones.get(src_name)
                 tar_bone = tar_arm.pose.bones.get(tar_name)
 
                 if "Foot" in src_name:
@@ -2800,7 +2909,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         # add constraints
         for src_name in bones_map:
             tar_name = bones_map[src_name]
-            src_bone = src_arm.pose.bones.get(src_name)
+            src_bone = src_arm_copy.pose.bones.get(src_name)
             tar_bone = tar_arm.pose.bones.get(tar_name)
 
             if src_bone == None:
@@ -2813,14 +2922,14 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             cns_name = "Copy Rotation_retarget"
             cns = tar_bone.constraints.new("COPY_ROTATION")
             cns.name = cns_name
-            cns.target = src_arm
+            cns.target = src_arm_copy
             cns.subtarget = src_name
 
             if "Hips" in src_name:
                 cns_name = "Copy Location_retarget"
                 cns = tar_bone.constraints.new("COPY_LOCATION")
                 cns.name = cns_name
-                cns.target = src_arm
+                cns.target = src_arm_copy
                 cns.subtarget = src_name
                 cns.owner_space = cns.target_space = "LOCAL"
 
@@ -2835,7 +2944,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
                 cns_name = "Copy Location_retarget"
                 cns = tar_bone.constraints.new("COPY_LOCATION")
                 cns.name = cns_name
-                cns.target = src_arm
+                cns.target = src_arm_copy
                 cns.subtarget = src_name
                 cns.target_space = cns.owner_space = "POSE"
 
@@ -2868,7 +2977,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         )
 
     bpy.ops.object.mode_set(mode="OBJECT")
-    set_active_object(src_arm.name)
+    set_active_object(src_arm_copy.name)
     set_active_object(tar_arm.name)
     print("Animation imported.")
 
