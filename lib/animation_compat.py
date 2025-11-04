@@ -109,19 +109,34 @@ def assign_action_to_animdata(anim_data, action, target_datablock=None):
     if anim_data is None or action is None:
         return False
     
-    # Assign the action
+    # Assign the action (works in all versions)
     anim_data.action = action
     
-    # In Blender 4.4+, we need to ensure a slot is assigned
+    # Blender 4.4+: explicitly assign an Action Slot if auto-assignment didn't happen
     if has_slotted_actions():
-        # Auto-assignment should work in most cases, but we can be explicit
-        if hasattr(anim_data, 'action_slot') and anim_data.action_slot is None:
-            # Try to assign first suitable slot
-            if hasattr(anim_data, 'action_suitable_slots') and len(anim_data.action_suitable_slots) > 0:
-                anim_data.action_slot = anim_data.action_suitable_slots[0]
-            elif hasattr(action, 'slots') and len(action.slots) > 0:
-                # Fallback: assign first slot
-                anim_data.action_slot = action.slots[0]
+        # Official pattern: use anim_data.action_slot and action_suitable_slots
+        if hasattr(anim_data, 'action_slot'):
+            try:
+                if anim_data.action_slot is None:
+                    suitable = getattr(anim_data, 'action_suitable_slots', None)
+                    if suitable and len(suitable) > 0:
+                        # Direct assignment of the slot object
+                        anim_data.action_slot = suitable[0]
+                    else:
+                        # Fallback: ensure a slot by creating/ensuring an FCurve for this datablock
+                        # This API will also create the layer/strip/slot and assign it as needed
+                        if target_datablock is not None and hasattr(action, 'fcurve_ensure_for_datablock'):
+                            try:
+                                # Use a representative data path for the datablock type
+                                data_path = 'location'
+                                if hasattr(target_datablock, 'pose') and hasattr(target_datablock.pose, 'bones') and len(target_datablock.pose.bones) > 0:
+                                    first_bone_name = target_datablock.pose.bones[0].name
+                                    data_path = f'pose.bones["{first_bone_name}"].rotation_euler'
+                                action.fcurve_ensure_for_datablock(target_datablock, data_path, index=0)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
     
     return True
 
@@ -202,9 +217,13 @@ def duplicate_action_assignment(src_anim_data, dst_anim_data):
     dst_anim_data.action = src_anim_data.action
     
     # In 4.4+, also copy the slot assignment
-    if has_slotted_actions() and hasattr(src_anim_data, 'action_slot'):
-        if src_anim_data.action_slot is not None:
-            dst_anim_data.action_slot = src_anim_data.action_slot
+    if has_slotted_actions():
+        if hasattr(src_anim_data, 'action_slot') and hasattr(dst_anim_data, 'action_slot'):
+            try:
+                if src_anim_data.action_slot is not None:
+                    dst_anim_data.action_slot = src_anim_data.action_slot
+            except Exception:
+                pass
     
     return True
 

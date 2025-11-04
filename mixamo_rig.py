@@ -10,6 +10,15 @@ from .lib import animation_compat
 
 # OPERATOR CLASSES
 ##################
+def _safe_deselect_all():
+    try:
+        bpy.ops.object.select_all(action="DESELECT")
+    except Exception:
+        for ob in bpy.context.view_layer.objects:
+            try:
+                ob.select_set(False)
+            except Exception:
+                pass
 class MR_OT_update(bpy.types.Operator):
     """Update old control rig to Blender 3.0"""
 
@@ -156,7 +165,7 @@ class MR_OT_make_rig(bpy.types.Operator):
             # only select the armature
             arm = get_object(context.active_object.name)
             bpy.ops.object.mode_set(mode="OBJECT")
-            bpy.ops.object.select_all(action="DESELECT")
+            _safe_deselect_all()
             set_active_object(arm.name)
 
             # enable all armature layers
@@ -175,7 +184,7 @@ class MR_OT_make_rig(bpy.types.Operator):
                     self.animated_armature["mix_to_del"] = True
 
                     bpy.ops.object.mode_set(mode="OBJECT")
-                    bpy.ops.object.select_all(action="DESELECT")
+                    _safe_deselect_all()
                     set_active_object(arm.name)
 
             # set to rest pose, clear animation
@@ -202,7 +211,7 @@ class MR_OT_make_rig(bpy.types.Operator):
 
         finally:
             bpy.ops.object.mode_set(mode="OBJECT")
-            bpy.ops.object.select_all(action="DESELECT")
+            _safe_deselect_all()
             set_active_object(arm.name)
 
             if debug == False:
@@ -308,6 +317,13 @@ class MR_OT_import_anim(bpy.types.Operator):
 
         finally:
             if debug == False:
+                # Ensure the control rig is active before restoring layers
+                try:
+                    _safe_deselect_all()
+                    if 'tar_arm' in locals() and tar_arm:
+                        set_active_object(tar_arm.name)
+                except Exception:
+                    pass
                 restore_armature_layers(layer_select)
                 remove_retarget_cns(bpy.context.active_object)
 
@@ -484,7 +500,7 @@ def clean_scene():
 
 def init_armature_transforms(rig):
     bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
+    _safe_deselect_all()
     set_active_object(rig.name)
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -611,37 +627,22 @@ def _make_rig(self):
             ctrl_collection = rig.data.collections.new(coll_ctrl_name)
         ctrl_collection.assign(c_master)
 
-
-        # Create Ctrl_Hips bone
-        c_hips = create_edit_bone("Ctrl_Hips")
-        c_hips.head = [0, 0, 0]
-        c_hips.tail = [0, 0, 0.05 * rig.dimensions[2]]
-        c_hips.roll = 0.01
-        c_hips.parent = c_master
-        ctrl_collection.assign(c_hips)
-
-
         # -- Pose --
         bpy.ops.object.mode_set(mode="POSE")
 
         c_master_pb = get_pose_bone(c_master_name)
-        c_hips_pb = get_pose_bone("Ctrl_Hips")
 
         # tag controller bones on Bone datablock (not EditBone) to avoid crashes
         c_master_pb.bone["mixamo_ctrl"] = 1
-        c_hips_pb.bone["mixamo_ctrl"] = 1
 
         # set custom shapes
         set_bone_custom_shape(c_master_pb, "cs_master")
-        set_bone_custom_shape(c_hips_pb, "cs_circle")
 
         # set rotation mode
         c_master_pb.rotation_mode = "XYZ"
-        c_hips_pb.rotation_mode = "XYZ"
 
         # set color group
         set_bone_color_group(rig, c_master_pb, "master")
-        set_bone_color_group(rig, c_hips_pb, "root_master")
 
     def add_spine():
         print("  Add Spine")
@@ -2370,24 +2371,31 @@ def _bake_anim(self):
 
 
 def redefine_source_rest_pose(src_arm, tar_arm):
+    """
+    Redefine the source armature's rest pose to match the target's rest pose.
+    This modifies src_arm directly (like 3.6 version) to ensure proper helper bone creation.
+    """
     print("  Redefining source rest pose...")
 
     scn = bpy.context.scene
 
-    src_arm_loc = src_arm.location.copy()
-    src_arm.location = [0, 0, 0]
-    
     # Get frame range using compatibility function
     src_action = animation_compat.get_action_from_animdata(src_arm.animation_data)
     fr_range = animation_compat.get_action_frame_range(src_action)
     fr_start = int(fr_range[0])
     fr_end = int(fr_range[1])
 
-    # duplicate source armature
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
+    # Save source location
+    src_arm_loc = src_arm.location.copy()
+    src_arm.location = [0, 0, 0]
+    
+    # Duplicate source armature to preserve animation
+    _safe_deselect_all()
     set_active_object(src_arm.name)
-    bpy.ops.object.mode_set(mode="OBJECT")
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
     duplicate_object()
     src_arm_dupli = get_object(bpy.context.active_object.name)
     src_arm_dupli["mix_to_del"] = True
@@ -2417,10 +2425,16 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     """
 
     # Store target bones rest transforms
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
+    _safe_deselect_all()
     set_active_object(tar_arm.name)
-    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+    except Exception:
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="EDIT")
+        except Exception:
+            pass
 
     rest_bones = {}
 
@@ -2431,15 +2445,21 @@ def redefine_source_rest_pose(src_arm, tar_arm):
             vec_roll_to_mat3(ebone.y_axis, ebone.roll),
         )
 
-    # Apply source bones rest transforms
+    # Apply target rest pose to the ORIGINAL src_arm (like 3.6 version)
     print("  Set rest pose...")
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
+    _safe_deselect_all()
     set_active_object(src_arm.name)
-    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+    except Exception:
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="EDIT")
+        except Exception:
+            pass
 
     for bname in rest_bones:
-        ebone = get_edit_bone(bname)
+        ebone = src_arm.data.edit_bones.get(bname)
 
         if ebone == None:
             # print("Warning, bone not found on source armature:", bname)
@@ -2452,8 +2472,17 @@ def redefine_source_rest_pose(src_arm, tar_arm):
             mat3_to_vec_roll(src_arm.matrix_world.inverted().to_3x3() @ mat3),
         )
 
-    # Add constraints
-    bpy.ops.object.mode_set(mode="POSE")
+    # Add constraints to src_arm to follow duplicate's animation
+    _safe_deselect_all()
+    set_active_object(src_arm.name)
+    try:
+        bpy.ops.object.mode_set(mode="POSE")
+    except Exception:
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="POSE")
+        except Exception:
+            pass
 
     for pb in src_arm.pose.bones:
         cns = pb.constraints.new("COPY_TRANSFORMS")
@@ -2473,18 +2502,17 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
     # Restore location
     src_arm.location = src_arm_loc
-
-    # Delete temp data
-    # constraints
+    
+    # Delete temp constraints
     for pb in src_arm.pose.bones:
         if len(pb.constraints):
             cns = pb.constraints.get("temp")
             if cns:
                 pb.constraints.remove(cns)
 
-        # src_arm_dupli
+    # Delete the duplicate
     delete_object(src_arm_dupli)
-
+    
     print("  Source armature rest pose redefined.")
 
 
@@ -2507,13 +2535,11 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         print("  No action found on the source armature")
         return
 
-    # Use compatibility function to get action
     src_action_check = animation_compat.get_action_from_animdata(src_arm.animation_data)
     if src_action_check == None:
         print("  No action found on the source armature")
         return
 
-    # Check for F-Curves using compatibility function
     src_fcurves = animation_compat.get_action_fcurves(src_action_check)
     if len(src_fcurves) == 0:
         print("  No keyframes to import")
@@ -2521,15 +2547,57 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
     use_name_prefix = True
 
-    # Redefine source armature rest pose if importing only animation, since
-    # Mixamo Fbx may have different rest pose when the Fbx file contains only animation data
+    # CRITICAL FIX: Work on a duplicate, then reassign src_arm like 3.6 does
+    _safe_deselect_all()
+    set_active_object(src_arm.name)
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+
+    duplicate_object()
+    src_arm_copy_name = src_arm.name + "_COPY"
+    bpy.context.active_object.name = src_arm_copy_name
+    
+    # CRITICAL: Reassign src_arm to the copy, like 3.6 line 2465
+    src_arm = get_object(src_arm_copy_name)
+    src_arm["mix_to_del"] = True
+
+    # Redefine source armature rest pose if importing only animation
     if import_only:
         redefine_source_rest_pose(src_arm, tar_arm)
 
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
+    # Get anim data - AFTER redefine_source_rest_pose
+    if src_arm.animation_data:
+        action_src_anim_data = src_arm.animation_data
+        action = animation_compat.get_action_from_animdata(action_src_anim_data)
+    else:
+        print("  ERROR: No animation data after rest pose redefine")
+        return
+        
+    if action is None:
+        print("  ERROR: No action found")
+        return
+
+    # Ensure proper slot assignment (4.4+)
+    try:
+        src_anim_data = src_arm.animation_data_create()
+        animation_compat.assign_action_to_animdata(src_anim_data, action, src_arm)
+    except Exception:
+        pass
+
+    frame_range = animation_compat.get_action_frame_range(action)
+    fr_start = int(frame_range[0])
+    fr_end = int(frame_range[1])
+
+    # Ensure target is active for bone data collection
+    _safe_deselect_all()
     set_active_object(tar_arm.name)
-    bpy.ops.object.mode_set(mode="POSE")
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.mode_set(mode="POSE")
+    except Exception:
+        pass
 
     hand_left_name = get_mix_name("LeftHand", use_name_prefix)
     hand_right_name = get_mix_name("RightHand", use_name_prefix)
@@ -2703,60 +2771,11 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             c_prefix + "Toe_IK_Right"
         )
 
-    # Work on a source armature duplicate
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
-    set_active_object(src_arm.name)
-
-    duplicate_object()
-    src_arm_copy_name = src_arm.name + "_COPY"
-    bpy.context.active_object.name = src_arm_copy_name
-    src_arm_copy = get_object(src_arm_copy_name)
-    src_arm_copy["mix_to_del"] = True
-
-    # Get anim data - handle both active actions and NLA strips
-    # Compatible with both legacy and slotted actions (4.4+)
-    action = None
-    action_src_anim_data = None
-    
-    if src_arm_copy.animation_data:
-        action_src_anim_data = src_arm_copy.animation_data
-        action = animation_compat.get_action_from_animdata(action_src_anim_data)
-        
-        if action is None and len(action_src_anim_data.nla_tracks) > 0:
-            # Try to get action from NLA tracks
-            for track in action_src_anim_data.nla_tracks:
-                if not track.mute and len(track.strips) > 0:
-                    action = animation_compat.get_action_from_nla_strip(track.strips[0])
-                    if action:
-                        # Set as active action for processing (handles slots in 4.4+)
-                        animation_compat.assign_action_to_animdata(
-                            action_src_anim_data, 
-                            action, 
-                            src_arm_copy
-                        )
-                        break
-    
-    if action is None:
-        print("  ERROR: No action found on the source armature (neither active action nor NLA strips)")
-        # Clean up the duplicate
-        bpy.ops.object.mode_set(mode="OBJECT")
-        bpy.ops.object.select_all(action="DESELECT")
-        set_active_object(src_arm_copy_name)
-        bpy.ops.object.delete()
-        return
-    
-    # Get frame range using compatibility function
-    frame_range = animation_compat.get_action_frame_range(action)
-    fr_start = int(frame_range[0])
-    fr_end = int(frame_range[1])
-
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
-    set_active_object(tar_arm.name)
-
     # Store bones data from target armature
-    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+    except Exception:
+        pass
 
     ctrl_matrices = {}
     ik_bones_data = {}
@@ -2793,50 +2812,77 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             ik_bones_data[b] = type, side, ik_bones
 
     # Init source armature rotation and scale
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
-
-    set_active_object(src_arm_copy.name)
-
-    scale_fac = src_arm_copy.scale[0]
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    _safe_deselect_all()
+    set_active_object(src_arm.name)
     
-    # Get F-Curves using compatibility function (works with both legacy and slotted actions)
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    
+    bpy.context.view_layer.update()
+
+    scale_fac = src_arm.scale[0]
+    print(f"  Source scale factor: {scale_fac}")
+    
+    try:
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        bpy.context.evaluated_depsgraph_get().update()
+    except Exception as e:
+        print(f"  Warning: Could not apply transforms: {e}")
+
+    # Get F-Curves and scale location keyframes
     action_fcurves = animation_compat.get_action_fcurves(action)
+    print(f"  Scaling {len(action_fcurves)} fcurves")
     for fc in action_fcurves:
         dp = fc.data_path
         if dp.startswith("pose.bones") and dp.endswith(".location"):
             for k in fc.keyframe_points:
                 k.co[1] *= scale_fac
 
-    bpy.ops.object.mode_set(mode="EDIT")
+    # CRITICAL: Re-establish src_arm as active in EDIT mode for helper bone creation
+    _safe_deselect_all()
+    set_active_object(src_arm.name)
+    bpy.context.view_layer.update()
+    
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+    except Exception as e:
+        print(f"  ERROR: Could not switch to EDIT mode: {e}")
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="EDIT")
+        except Exception as e2:
+            print(f"  CRITICAL: Mode switch failed: {e2}")
+            return
+
+    print(f"  Creating helper bones on {src_arm.name}")
 
     # Add helper source bones
-    # add feet bones helpers
+    # add feet/hand bones helpers
     for name in ctrl_matrices:
         foot_ebone = create_edit_bone(name)
         foot_ebone.head, foot_ebone.tail = [0, 0, 0], [0, 0, 0.1]
         foot_ebone.matrix = ctrl_matrices[name][0]
         foot_ebone.parent = get_edit_bone(ctrl_matrices[name][1])
+        print(f"    Created helper bone: {name}")
 
-        # add IK bones helpers
+    # add IK bones helpers
     for b in ik_bones_data:
         type, side, ik_bones = ik_bones_data[b]
         for bone_type in ik_bones:
             bname, bhead, btail, broll = ik_bones[bone_type]
             ebone = create_edit_bone(bname)
             ebone.head, ebone.tail, ebone.roll = bhead, btail, broll
+            print(f"    Created IK helper bone: {bname}")
 
-        # set parents
-    for b in ik_bones_data:
-        type, side, ik_bones = ik_bones_data[b]
-        ik2_name = ik_bones["ik2"][0]
-        ik2 = get_edit_bone(ik2_name)
+    # set constraints in POSE mode
+    try:
+        bpy.ops.object.mode_set(mode="POSE")
+    except Exception:
+        pass
 
-        # set constraints
-    bpy.ops.object.mode_set(mode="POSE")
-
-    bake_ik_data = {"src_arm": src_arm_copy}
+    bake_ik_data = {"src_arm": src_arm}
 
     for b in ik_bones_data:
         type, side, ik_bones = ik_bones_data[b]
@@ -2862,125 +2908,123 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
         cns = b1_pb.constraints.new("COPY_TRANSFORMS")
         cns.name = "Copy Transforms"
-        cns.target = src_arm_copy
+        cns.target = src_arm
         cns.subtarget = chain[0]
 
         cns = b2_pb.constraints.new("COPY_TRANSFORMS")
         cns.name = "Copy Transforms"
-        cns.target = src_arm_copy
+        cns.target = src_arm
         cns.subtarget = chain[1]
 
-    # Retarget
-    retarget_method = 2
-
-    # Method 1: Direct matrix retargetting (slower)
-    if retarget_method == 1:
-        for fr in range(fr_start, fr_end + 1):
-            print("  frame", fr)
-            scn.frame_set(fr)
-            bpy.context.view_layer.update()
-
-            for src_name in bones_map:
-                tar_name = bones_map[src_name]
-                src_bone = src_arm_copy.pose.bones.get(src_name)
-                tar_bone = tar_arm.pose.bones.get(tar_name)
-
-                if "Foot" in src_name:
-                    tar_mix_bone = tar_arm.pose.bones.get(src_name)
-                    # print("  tar_mix_bone", tar_mix_bone.name)
-                    offset_mat = tar_bone.matrix @ tar_mix_bone.matrix.inverted()
-                    tar_bone.matrix = offset_mat @ src_bone.matrix.copy()
-                else:
-                    tar_bone.matrix = src_bone.matrix.copy()
-
-                if not "Hips" in src_name:
-                    tar_bone.location = [0, 0, 0]
-
-                bpy.context.view_layer.update()  # Not ideal, slow performances
-
-    # Method 2: Constrained retargetting (faster)
-    elif retarget_method == 2:
-        bpy.ops.object.mode_set(mode="OBJECT")
-        bpy.ops.object.select_all(action="DESELECT")
-        set_active_object(tar_arm.name)
-        bpy.ops.object.mode_set(mode="POSE")
-        bpy.ops.pose.select_all(action="DESELECT")
-
-        # add constraints
-        for src_name in bones_map:
-            tar_name = bones_map[src_name]
-            src_bone = src_arm_copy.pose.bones.get(src_name)
-            tar_bone = tar_arm.pose.bones.get(tar_name)
-
-            if src_bone == None:
-                # print("SKIP BONE", src_name)
-                continue
-            if tar_bone == None:
-                # print("SKIP BONE", tar_name)
-                continue
-
-            cns_name = "Copy Rotation_retarget"
-            cns = tar_bone.constraints.new("COPY_ROTATION")
-            cns.name = cns_name
-            cns.target = src_arm_copy
-            cns.subtarget = src_name
-
-            if "Hips" in src_name:
-                cns_name = "Copy Location_retarget"
-                cns = tar_bone.constraints.new("COPY_LOCATION")
-                cns.name = cns_name
-                cns.target = src_arm_copy
-                cns.subtarget = src_name
-                cns.owner_space = cns.target_space = "LOCAL"
-
-            # Foot IK, Hand IK
-            if (
-                (leg_left_kinematic == "IK" and "Foot_IK_Left" in src_name)
-                or (leg_right_kinematic == "IK" and "Foot_IK_Right" in src_name)
-                or (arm_left_kinematic == "IK" and "Hand_IK_Left" in src_name)
-                or (arm_right_kinematic == "IK" and "Hand_IK_Right" in src_name)
-            ):
-                # print("  set IK remap constraints", src_name)
-                cns_name = "Copy Location_retarget"
-                cns = tar_bone.constraints.new("COPY_LOCATION")
-                cns.name = cns_name
-                cns.target = src_arm_copy
-                cns.subtarget = src_name
-                cns.target_space = cns.owner_space = "POSE"
-
-                # select IK poles
-                _side = "_Left" if "Left" in src_name else "_Right"
-                ik_pole_name = ""
-                if "Hand" in src_name:
-                    ik_pole_name = c_prefix + arm_rig_names["pole_ik"] + _side
-                elif "Foot" in src_name:
-                    ik_pole_name = c_prefix + leg_rig_names["pole_ik"] + _side
-
-                ik_pole_ctrl = get_pose_bone(ik_pole_name)
-                tar_arm.data.bones.active = ik_pole_ctrl.bone
-                ik_pole_ctrl.bone.select = True
-
-            # select
-            tar_arm.data.bones.active = tar_bone.bone
-            tar_bone.bone.select = True
-
-        bpy.context.view_layer.update()
-
-        # bake
-        bake_anim(
-            frame_start=fr_start,
-            frame_end=fr_end,
-            only_selected=True,
-            bake_bones=True,
-            bake_object=False,
-            ik_data=bake_ik_data,
-        )
-
-    bpy.ops.object.mode_set(mode="OBJECT")
-    set_active_object(src_arm_copy.name)
+    # Retarget - Method 2: Constrained retargetting
+    _safe_deselect_all()
     set_active_object(tar_arm.name)
+    
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.mode_set(mode="POSE")
+    except Exception as e:
+        print(f"  ERROR switching to POSE: {e}")
+        return
+    
+    bpy.ops.pose.select_all(action="DESELECT")
+    bpy.context.view_layer.update()
+
+    print(f"  Adding retarget constraints...")
+    
+    # add constraints
+    for src_name in bones_map:
+        tar_name = bones_map[src_name]
+        src_bone = src_arm.pose.bones.get(src_name)
+        tar_bone = tar_arm.pose.bones.get(tar_name)
+
+        if src_bone == None:
+            print(f"    SKIP: Source bone not found: {src_name}")
+            continue
+        if tar_bone == None:
+            print(f"    SKIP: Target bone not found: {tar_name}")
+            continue
+
+        # All bones get COPY_ROTATION first
+        cns_name = "Copy Rotation_retarget"
+        cns = tar_bone.constraints.new("COPY_ROTATION")
+        cns.name = cns_name
+        cns.target = src_arm
+        cns.subtarget = src_name
+
+        # Hips gets COPY_LOCATION in LOCAL space
+        if "Hips" in src_name:
+            cns_name = "Copy Location_retarget"
+            cns = tar_bone.constraints.new("COPY_LOCATION")
+            cns.name = cns_name
+            cns.target = src_arm
+            cns.subtarget = src_name
+            cns.owner_space = cns.target_space = "LOCAL"
+            print(f"    Added Hips constraints: {src_name} -> {tar_name}")
+
+        # Foot IK, Hand IK get COPY_LOCATION in POSE space
+        if (
+            (leg_left_kinematic == "IK" and "Foot_IK_Left" in src_name)
+            or (leg_right_kinematic == "IK" and "Foot_IK_Right" in src_name)
+            or (arm_left_kinematic == "IK" and "Hand_IK_Left" in src_name)
+            or (arm_right_kinematic == "IK" and "Hand_IK_Right" in src_name)
+        ):
+            cns_name = "Copy Location_retarget"
+            cns = tar_bone.constraints.new("COPY_LOCATION")
+            cns.name = cns_name
+            cns.target = src_arm
+            cns.subtarget = src_name
+            cns.target_space = cns.owner_space = "POSE"
+            print(f"    Added IK constraints: {src_name} -> {tar_name}")
+
+            # select IK poles
+            _side = "_Left" if "Left" in src_name else "_Right"
+            ik_pole_name = ""
+            if "Hand" in src_name:
+                ik_pole_name = c_prefix + arm_rig_names["pole_ik"] + _side
+            elif "Foot" in src_name:
+                ik_pole_name = c_prefix + leg_rig_names["pole_ik"] + _side
+
+            ik_pole_ctrl = get_pose_bone(ik_pole_name)
+            tar_arm.data.bones.active = ik_pole_ctrl.bone
+            ik_pole_ctrl.bone.select = True
+
+        # select
+        tar_arm.data.bones.active = tar_bone.bone
+        tar_bone.bone.select = True
+
+    bpy.context.view_layer.update()
+
+    # bake
+    print(f"  Baking animation frames {fr_start} to {fr_end}...")
+    bake_anim(
+        frame_start=fr_start,
+        frame_end=fr_end,
+        only_selected=True,
+        bake_bones=True,
+        bake_object=False,
+        ik_data=bake_ik_data,
+    )
+
+    # Cleanup
+    try:
+        _safe_deselect_all()
+        set_active_object(tar_arm.name)
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+        
     print("Animation imported.")
 
+    # Ensure target has proper action slot (4.4+)
+    try:
+        if tar_arm.animation_data and tar_arm.animation_data.action:
+            animation_compat.assign_action_to_animdata(
+                tar_arm.animation_data, tar_arm.animation_data.action, tar_arm
+            )
+    except Exception:
+        pass
+    
 
 def remove_retarget_cns(armature):
     # print("Removing constraints...")

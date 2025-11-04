@@ -171,14 +171,17 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     store_keyframe(pb.name, "scale", arr_idx, f, value)
                     
             
-            # Add keyframes (compatible with both legacy and slotted actions)
-            # Get fcurves collection once outside the loop to avoid issues
-            action_fcurves = animation_compat.get_action_fcurves(action)
+            # Add keyframes (use ensure API so 4.4+ creates slot/layer/strip)
             for fc_key, key_values in keyframes.items():
                 data_path, index = fc_key
-                fcurve = action_fcurves.find(data_path=data_path, index=index)
-                if fcurve == None:
-                    fcurve = action_fcurves.new(data_path, index=index, action_group=pb.name)
+                fcurve = animation_compat.ensure_fcurve_exists(action, armature, data_path, index=index)
+                # ensure the fcurve is grouped under the bone name (harmless if already set)
+                try:
+                    if fcurve.group is None or fcurve.group.name != pb.name:
+                        grp = action.groups.get(pb.name) or action.groups.new(pb.name)
+                        fcurve.group = grp
+                except Exception:
+                    pass
 
                 num_keys = len(key_values) // 2
                 fcurve.keyframe_points.add(num_keys)
@@ -231,3 +234,14 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
 
     # restore current frame
     scn.frame_set(current_frame)
+
+    # Blender 4.4+: Ensure the newly created action has its slot assigned
+    try:
+        if has_slotted_actions() and armature.animation_data:
+            anim_data = armature.animation_data
+            if hasattr(anim_data, 'action_slot') and anim_data.action_slot is None:
+                suitable = getattr(anim_data, 'action_suitable_slots', None)
+                if suitable and len(suitable) > 0:
+                    anim_data.action_slot = suitable[0]
+    except Exception:
+        pass
