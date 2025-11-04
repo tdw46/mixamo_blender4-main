@@ -11,7 +11,7 @@ website = "https://github.com/tdw46/mixamo_blender4-main/tree/main"
 
 tags = ["Import-Export", "Animation", "Modeling"]
 
-blender_version_min = "2.93.0"
+blender_version_min = "4.2.0"
 blender_version_max = "4.5.999"
 
 license = ["SPDX:GPL-3.0-or-later"]
