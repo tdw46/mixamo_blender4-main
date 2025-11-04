@@ -651,10 +651,10 @@ def _make_rig(self):
         bpy.ops.object.mode_set(mode="EDIT")
 
         # Create bones
-        hips_name = get_mix_name(spine_names["pelvis"], use_name_prefix)
-        spine_name = get_mix_name(spine_names["spine1"], use_name_prefix)
-        spine1_name = get_mix_name(spine_names["spine2"], use_name_prefix)
-        spine2_name = get_mix_name(spine_names["spine3"], use_name_prefix)
+        hips_name = get_src_bone_name(spine_names["pelvis"])
+        spine_name = get_src_bone_name(spine_names["spine1"])
+        spine1_name = get_src_bone_name(spine_names["spine2"])
+        spine2_name = get_src_bone_name(spine_names["spine3"])
 
         hips = get_edit_bone(hips_name)
         spine = get_edit_bone(spine_name)
@@ -774,7 +774,7 @@ def _make_rig(self):
         spine_bone_matches = {"1": c_spine_name, "2": c_spine1_name, "3": c_spine2_name}
         for str_idx in spine_bone_matches:
             c_name = spine_bone_matches[str_idx]
-            mixamo_bname = get_mix_name(spine_names["spine" + str_idx], use_name_prefix)
+            mixamo_bname = get_src_bone_name(spine_names["spine" + str_idx])
             mixamo_spine_pb = get_pose_bone(mixamo_bname)
             cns = mixamo_spine_pb.constraints.get("Copy Transforms")
             if cns == None:
@@ -790,9 +790,9 @@ def _make_rig(self):
         bpy.ops.object.mode_set(mode="EDIT")
 
         # Create bones
-        neck_name = get_mix_name(head_names["neck"], use_name_prefix)
-        head_name = get_mix_name(head_names["head"], use_name_prefix)
-        head_end_name = get_mix_name(head_names["head_end"], use_name_prefix)
+        neck_name = get_src_bone_name(head_names["neck"])
+        head_name = get_src_bone_name(head_names["head"])
+        head_end_name = get_src_bone_name(head_names["head_end"])
 
         neck = get_edit_bone(neck_name)
         head = get_edit_bone(head_name)
@@ -856,11 +856,11 @@ def _make_rig(self):
         print("  Add Leg", side)
 
         _side = "_" + side
-        thigh_name = get_mix_name(side + leg_names["thigh"], use_name_prefix)
-        calf_name = get_mix_name(side + leg_names["calf"], use_name_prefix)
-        foot_name = get_mix_name(side + leg_names["foot"], use_name_prefix)
-        toe_name = get_mix_name(side + leg_names["toes"], use_name_prefix)
-        toe_end_name = get_mix_name(side + leg_names["toes_end"], use_name_prefix)
+        thigh_name = get_src_bone_name(side + leg_names["thigh"])
+        calf_name = get_src_bone_name(side + leg_names["calf"])
+        foot_name = get_src_bone_name(side + leg_names["foot"])
+        toe_name = get_src_bone_name(side + leg_names["toes"])
+        toe_end_name = get_src_bone_name(side + leg_names["toes_end"])
 
         # -- Edit --
         bpy.ops.object.mode_set(mode="EDIT")
@@ -871,7 +871,7 @@ def _make_rig(self):
         toe = get_edit_bone(toe_name)
         toe_end = get_edit_bone(toe_end_name)
 
-        hips = get_edit_bone(get_mix_name(spine_names["pelvis"], use_name_prefix))
+        hips = get_edit_bone(get_src_bone_name(spine_names["pelvis"]))
         c_hips_free_name = c_prefix + spine_rig_names["hips_free"]
         c_hips_free = get_edit_bone(c_hips_free_name)
 
@@ -1752,10 +1752,10 @@ def _make_rig(self):
     def add_arm(side):
         print("  Add Arm", side)
         _side = "_" + side
-        shoulder_name = get_mix_name(side + arm_names["shoulder"], use_name_prefix)
-        arm_name = get_mix_name(side + arm_names["arm"], use_name_prefix)
-        forearm_name = get_mix_name(side + arm_names["forearm"], use_name_prefix)
-        hand_name = get_mix_name(side + arm_names["hand"], use_name_prefix)
+        shoulder_name = get_src_bone_name(side + arm_names["shoulder"])
+        arm_name = get_src_bone_name(side + arm_names["arm"])
+        forearm_name = get_src_bone_name(side + arm_names["forearm"])
+        hand_name = get_src_bone_name(side + arm_names["hand"])
 
         # -- Edit --
         bpy.ops.object.mode_set(mode="EDIT")
@@ -1803,7 +1803,7 @@ def _make_rig(self):
 
         # fingers "leaves"/tip bones
         for fname in fingers_type:
-            finger_name = get_mix_name(side + "Hand" + fname + "4", use_name_prefix)
+            finger_name = get_src_bone_name(side + "Hand" + fname + "4")
             finger_leaf = get_edit_bone(finger_name)
             finger_leaves.append(finger_leaf)
 
@@ -2545,11 +2545,21 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         print("  No keyframes to import")
         return
 
-    use_name_prefix = True
-
     # CRITICAL FIX: Work on a duplicate, then reassign src_arm like 3.6 does
     _safe_deselect_all()
     set_active_object(src_arm.name)
+    
+    # Detect if source armature uses mixamorig: prefix
+    use_name_prefix = False
+    detected_prefix = ""
+    for bone in src_arm.data.bones:
+        if bone.name.startswith("mixamorig") and ':' in bone.name:
+            use_name_prefix = True
+            detected_prefix = bone.name.split(':')[0] + ':'
+            print(f"  Detected Mixamo prefix: {detected_prefix}")
+            break
+    if not use_name_prefix:
+        print("  No Mixamo prefix detected, using plain bone names")
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
     except Exception:
@@ -2562,6 +2572,18 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     # CRITICAL: Reassign src_arm to the copy, like 3.6 line 2465
     src_arm = get_object(src_arm_copy_name)
     src_arm["mix_to_del"] = True
+    
+    # Store the detected prefix on the source armature data so get_mixamo_prefix() can find it
+    # This is critical because get_mixamo_prefix() reads from active_object, but we'll be
+    # working with the target armature active when creating constraints
+    src_arm.data["mixamo_prefix"] = detected_prefix
+    
+    # Helper function to construct source bone names with the correct prefix
+    def get_src_bone_name(base_name):
+        if use_name_prefix:
+            return detected_prefix + base_name
+        else:
+            return base_name
 
     # Redefine source armature rest pose if importing only animation
     if import_only:
@@ -2599,10 +2621,10 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     except Exception:
         pass
 
-    hand_left_name = get_mix_name("LeftHand", use_name_prefix)
-    hand_right_name = get_mix_name("RightHand", use_name_prefix)
-    foot_left_name = get_mix_name("LeftFoot", use_name_prefix)
-    foot_right_name = get_mix_name("RightFoot", use_name_prefix)
+    hand_left_name = get_src_bone_name("LeftHand")
+    hand_right_name = get_src_bone_name("RightHand")
+    foot_left_name = get_src_bone_name("LeftFoot")
+    foot_right_name = get_src_bone_name("RightFoot")
 
     hand_left_pb = get_pose_bone(hand_left_name)
     c_hand_ik_left_pb = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + "_Left")
@@ -2621,153 +2643,153 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     # Set bones mapping for retargetting
     bones_map = {}
 
-    bones_map[get_mix_name("Hips", use_name_prefix)] = c_prefix + "Hips"
-    bones_map[get_mix_name("Spine", use_name_prefix)] = c_prefix + "Spine"
-    bones_map[get_mix_name("Spine1", use_name_prefix)] = c_prefix + "Spine1"
-    bones_map[get_mix_name("Spine2", use_name_prefix)] = c_prefix + "Spine2"
-    bones_map[get_mix_name("Neck", use_name_prefix)] = c_prefix + "Neck"
-    bones_map[get_mix_name("Head", use_name_prefix)] = c_prefix + "Head"
-    bones_map[get_mix_name("LeftShoulder", use_name_prefix)] = (
+    bones_map[get_src_bone_name("Hips")] = c_prefix + "Hips"
+    bones_map[get_src_bone_name("Spine")] = c_prefix + "Spine"
+    bones_map[get_src_bone_name("Spine1")] = c_prefix + "Spine1"
+    bones_map[get_src_bone_name("Spine2")] = c_prefix + "Spine2"
+    bones_map[get_src_bone_name("Neck")] = c_prefix + "Neck"
+    bones_map[get_src_bone_name("Head")] = c_prefix + "Head"
+    bones_map[get_src_bone_name("LeftShoulder")] = (
         c_prefix + "Shoulder_Left"
     )
-    bones_map[get_mix_name("RightShoulder", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightShoulder")] = (
         c_prefix + "Shoulder_Right"
     )
 
     # Arm
     if arm_left_kinematic == "FK":
-        bones_map[get_mix_name("LeftArm", use_name_prefix)] = c_prefix + "Arm_FK_Left"
-        bones_map[get_mix_name("LeftForeArm", use_name_prefix)] = (
+        bones_map[get_src_bone_name("LeftArm")] = c_prefix + "Arm_FK_Left"
+        bones_map[get_src_bone_name("LeftForeArm")] = (
             c_prefix + "ForeArm_FK_Left"
         )
-        bones_map[get_mix_name("LeftHand", use_name_prefix)] = c_prefix + "Hand_FK_Left"
+        bones_map[get_src_bone_name("LeftHand")] = c_prefix + "Hand_FK_Left"
     elif arm_left_kinematic == "IK":
         bones_map[c_prefix + "Hand_IK_Left"] = c_prefix + "Hand_IK_Left"
 
     if arm_right_kinematic == "FK":
-        bones_map[get_mix_name("RightArm", use_name_prefix)] = c_prefix + "Arm_FK_Right"
-        bones_map[get_mix_name("RightForeArm", use_name_prefix)] = (
+        bones_map[get_src_bone_name("RightArm")] = c_prefix + "Arm_FK_Right"
+        bones_map[get_src_bone_name("RightForeArm")] = (
             c_prefix + "ForeArm_FK_Right"
         )
-        bones_map[get_mix_name("RightHand", use_name_prefix)] = (
+        bones_map[get_src_bone_name("RightHand")] = (
             c_prefix + "Hand_FK_Right"
         )
     elif arm_right_kinematic == "IK":
         bones_map[c_prefix + "Hand_IK_Right"] = c_prefix + "Hand_IK_Right"
 
     # Fingers
-    bones_map[get_mix_name("LeftHandThumb1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandThumb1")] = (
         c_prefix + "Thumb1_Left"
     )
-    bones_map[get_mix_name("LeftHandThumb2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandThumb2")] = (
         c_prefix + "Thumb2_Left"
     )
-    bones_map[get_mix_name("LeftHandThumb3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandThumb3")] = (
         c_prefix + "Thumb3_Left"
     )
-    bones_map[get_mix_name("LeftHandIndex1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandIndex1")] = (
         c_prefix + "Index1_Left"
     )
-    bones_map[get_mix_name("LeftHandIndex2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandIndex2")] = (
         c_prefix + "Index2_Left"
     )
-    bones_map[get_mix_name("LeftHandIndex3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandIndex3")] = (
         c_prefix + "Index3_Left"
     )
-    bones_map[get_mix_name("LeftHandMiddle1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandMiddle1")] = (
         c_prefix + "Middle1_Left"
     )
-    bones_map[get_mix_name("LeftHandMiddle2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandMiddle2")] = (
         c_prefix + "Middle2_Left"
     )
-    bones_map[get_mix_name("LeftHandMiddle3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandMiddle3")] = (
         c_prefix + "Middle3_Left"
     )
-    bones_map[get_mix_name("LeftHandRing1", use_name_prefix)] = c_prefix + "Ring1_Left"
-    bones_map[get_mix_name("LeftHandRing2", use_name_prefix)] = c_prefix + "Ring2_Left"
-    bones_map[get_mix_name("LeftHandRing3", use_name_prefix)] = c_prefix + "Ring3_Left"
-    bones_map[get_mix_name("LeftHandPinky1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandRing1")] = c_prefix + "Ring1_Left"
+    bones_map[get_src_bone_name("LeftHandRing2")] = c_prefix + "Ring2_Left"
+    bones_map[get_src_bone_name("LeftHandRing3")] = c_prefix + "Ring3_Left"
+    bones_map[get_src_bone_name("LeftHandPinky1")] = (
         c_prefix + "Pinky1_Left"
     )
-    bones_map[get_mix_name("LeftHandPinky2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandPinky2")] = (
         c_prefix + "Pinky2_Left"
     )
-    bones_map[get_mix_name("LeftHandPinky3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("LeftHandPinky3")] = (
         c_prefix + "Pinky3_Left"
     )
-    bones_map[get_mix_name("RightHandThumb1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandThumb1")] = (
         c_prefix + "Thumb1_Right"
     )
-    bones_map[get_mix_name("RightHandThumb2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandThumb2")] = (
         c_prefix + "Thumb2_Right"
     )
-    bones_map[get_mix_name("RightHandThumb3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandThumb3")] = (
         c_prefix + "Thumb3_Right"
     )
-    bones_map[get_mix_name("RightHandIndex1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandIndex1")] = (
         c_prefix + "Index1_Right"
     )
-    bones_map[get_mix_name("RightHandIndex2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandIndex2")] = (
         c_prefix + "Index2_Right"
     )
-    bones_map[get_mix_name("RightHandIndex3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandIndex3")] = (
         c_prefix + "Index3_Right"
     )
-    bones_map[get_mix_name("RightHandMiddle1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandMiddle1")] = (
         c_prefix + "Middle1_Right"
     )
-    bones_map[get_mix_name("RightHandMiddle2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandMiddle2")] = (
         c_prefix + "Middle2_Right"
     )
-    bones_map[get_mix_name("RightHandMiddle3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandMiddle3")] = (
         c_prefix + "Middle3_Right"
     )
-    bones_map[get_mix_name("RightHandRing1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandRing1")] = (
         c_prefix + "Ring1_Right"
     )
-    bones_map[get_mix_name("RightHandRing2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandRing2")] = (
         c_prefix + "Ring2_Right"
     )
-    bones_map[get_mix_name("RightHandRing3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandRing3")] = (
         c_prefix + "Ring3_Right"
     )
-    bones_map[get_mix_name("RightHandPinky1", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandPinky1")] = (
         c_prefix + "Pinky1_Right"
     )
-    bones_map[get_mix_name("RightHandPinky2", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandPinky2")] = (
         c_prefix + "Pinky2_Right"
     )
-    bones_map[get_mix_name("RightHandPinky3", use_name_prefix)] = (
+    bones_map[get_src_bone_name("RightHandPinky3")] = (
         c_prefix + "Pinky3_Right"
     )
 
     if leg_left_kinematic == "FK":
-        bones_map[get_mix_name("LeftUpLeg", use_name_prefix)] = (
+        bones_map[get_src_bone_name("LeftUpLeg")] = (
             c_prefix + "UpLeg_FK_Left"
         )
-        bones_map[get_mix_name("LeftLeg", use_name_prefix)] = c_prefix + "Leg_FK_Left"
+        bones_map[get_src_bone_name("LeftLeg")] = c_prefix + "Leg_FK_Left"
         bones_map[c_prefix + "Foot_FK_Left"] = c_prefix + "Foot_FK_Left"
-        bones_map[get_mix_name("LeftToeBase", use_name_prefix)] = (
+        bones_map[get_src_bone_name("LeftToeBase")] = (
             c_prefix + "Toe_FK_Left"
         )
     elif leg_left_kinematic == "IK":
         bones_map[c_prefix + "Foot_IK_Left"] = c_prefix + "Foot_IK_Left"
-        bones_map[get_mix_name("LeftToeBase", use_name_prefix)] = (
+        bones_map[get_src_bone_name("LeftToeBase")] = (
             c_prefix + "Toe_IK_Left"
         )
 
     if leg_right_kinematic == "FK":
-        bones_map[get_mix_name("RightUpLeg", use_name_prefix)] = (
+        bones_map[get_src_bone_name("RightUpLeg")] = (
             c_prefix + "UpLeg_FK_Right"
         )
-        bones_map[get_mix_name("RightLeg", use_name_prefix)] = c_prefix + "Leg_FK_Right"
+        bones_map[get_src_bone_name("RightLeg")] = c_prefix + "Leg_FK_Right"
         bones_map[c_prefix + "Foot_FK_Right"] = c_prefix + "Foot_FK_Right"
-        bones_map[get_mix_name("RightToeBase", use_name_prefix)] = (
+        bones_map[get_src_bone_name("RightToeBase")] = (
             c_prefix + "Toe_FK_Right"
         )
     elif leg_right_kinematic == "IK":
         bones_map[c_prefix + "Foot_IK_Right"] = c_prefix + "Foot_IK_Right"
-        bones_map[get_mix_name("RightToeBase", use_name_prefix)] = (
+        bones_map[get_src_bone_name("RightToeBase")] = (
             c_prefix + "Toe_IK_Right"
         )
 
@@ -2790,7 +2812,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         type, kin_mode, side = kinematics[b]
         ctrl_name = c_prefix + type + "_" + kin_mode + "_" + side
         ctrl_ebone = get_edit_bone(ctrl_name)
-        mix_bone_name = get_mix_name(side + type, use_name_prefix)
+        mix_bone_name = get_src_bone_name(side + type)
 
         ctrl_matrices[ctrl_name] = ctrl_ebone.matrix.copy(), mix_bone_name
 
@@ -2894,15 +2916,15 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         chain = []
         if type == "Foot":
             chain = [
-                get_mix_name(side + "UpLeg", use_name_prefix),
-                get_mix_name(side + "Leg", use_name_prefix),
+                get_src_bone_name(side + "UpLeg"),
+                get_src_bone_name(side + "Leg"),
             ]
             bake_ik_data["Leg" + side] = chain
 
         elif type == "Hand":
             chain = [
-                get_mix_name(side + "Arm", use_name_prefix),
-                get_mix_name(side + "ForeArm", use_name_prefix),
+                get_src_bone_name(side + "Arm"),
+                get_src_bone_name(side + "ForeArm"),
             ]
             bake_ik_data["Arm" + side] = chain
 
