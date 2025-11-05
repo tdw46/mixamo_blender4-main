@@ -560,12 +560,14 @@ def _make_rig(self):
     rig_name = bpy.context.active_object.name
     rig = get_object(rig_name)
 
-    # Preload all custom shape objects in a single, safe place to avoid appending
-    # while rapidly switching modes during rig construction.
+    # Ensure we're in OBJECT mode - do NOT force dependency graph update here
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  Warning: Could not set initial mode: {e}")
+
+    # Preload all custom shape objects in a single, safe place to avoid appending
+    # while rapidly switching modes during rig construction.
     try:
         shape_names = [
             "cs_master",
@@ -608,6 +610,25 @@ def _make_rig(self):
 
     # Init transforms
     init_armature_transforms(rig)
+
+    # Detect if source armature uses mixamorig: prefix
+    detected_prefix = ""
+    try:
+        for bone in rig.data.bones:
+            if bone.name.startswith("mixamorig") and ':' in bone.name:
+                detected_prefix = bone.name.split(':')[0] + ':'
+                print(f"  Detected Mixamo prefix: {detected_prefix}")
+                break
+    except Exception as e:
+        print(f"  Warning: Could not detect prefix: {e}")
+    
+    if not detected_prefix:
+        print("  No Mixamo prefix detected, using plain bone names")
+
+    # Helper function to construct source bone names with the correct prefix
+    def get_src_bone_name(base_name):
+        result = (detected_prefix + base_name) if detected_prefix else base_name
+        return result
 
     def add_master():
         print("  Add Master")
@@ -655,6 +676,8 @@ def _make_rig(self):
         spine_name = get_src_bone_name(spine_names["spine1"])
         spine1_name = get_src_bone_name(spine_names["spine2"])
         spine2_name = get_src_bone_name(spine_names["spine3"])
+        
+        print(f"  Looking for bones: {hips_name}, {spine_name}, {spine1_name}, {spine2_name}")
 
         hips = get_edit_bone(hips_name)
         spine = get_edit_bone(spine_name)
@@ -662,7 +685,7 @@ def _make_rig(self):
         spine2 = get_edit_bone(spine2_name)
 
         if not hips or not spine or not spine1 or not spine2:
-            print("  Spine bones are missing, skip spine")
+            print(f"  Spine bones are missing (hips={hips}, spine={spine}, spine1={spine1}, spine2={spine2}), skip spine")
             return
 
         for b in [hips, spine, spine1, spine2]:
@@ -681,9 +704,14 @@ def _make_rig(self):
         # Free Hips Ctrl
         c_hips_free_name = c_prefix + spine_rig_names["hips_free"]
         c_hips_free = create_edit_bone(c_hips_free_name)
-        c_hips_free.head = hips.tail.copy()
-        c_hips_free.tail = hips.head.copy()
-        align_bone_x_axis(c_hips_free, hips.x_axis)
+        try:
+            c_hips_free.head = hips.tail.copy()
+            c_hips_free.tail = hips.head.copy()
+            align_bone_x_axis(c_hips_free, hips.x_axis)
+        except Exception as e:
+            print(f"  Warning: Error setting hips_free transforms: {e}")
+            # Fallback: use hips position
+            copy_bone_transforms(hips, c_hips_free)
         
 
         c_hips_free.parent = c_hips
@@ -2251,15 +2279,24 @@ def _zero_out():
     arm = bpy.data.objects.get(bpy.context.active_object.name)
 
     print("  Clear anim")
-    # Clear animation data (compatible with both legacy and slotted actions)
-    action = None
+    # Store the action for later if needed, then completely clear animation_data
+    # This is the most reliable way to avoid dependency graph crashes in Blender 4.5+
+    stored_action = None
     if arm.animation_data:
-        action = animation_compat.get_action_from_animdata(arm.animation_data)
-
-    if action:
-        action_fcurves = animation_compat.get_action_fcurves(action)
-        while len(action_fcurves):
-            action_fcurves.remove(action_fcurves[0])
+        try:
+            stored_action = animation_compat.get_action_from_animdata(arm.animation_data)
+            # Completely clear animation_data to avoid any dependency graph issues
+            arm.animation_data_clear()
+            print(f"  Animation data cleared (action was: {stored_action.name if stored_action else 'None'})")
+        except Exception as e:
+            print(f"  Warning: Could not clear animation data: {e}")
+            # Fallback: just unlink
+            try:
+                arm.animation_data.action = None
+                if animation_compat.has_slotted_actions() and hasattr(arm.animation_data, 'action_slot'):
+                    arm.animation_data.action_slot = None
+            except:
+                pass
 
     print("  Clear pose")
     # Reset pose

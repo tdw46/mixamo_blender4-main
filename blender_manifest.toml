@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "mixamo_rig_for_blender"
-version = "1.0.5"
+version = "1.0.8"
 name = "Mixamo Rig for Blender"
 tagline = "Generate a control rig from Mixamo Fbx skeleton"
 maintainer = "BeyondDev (Tyler Walker) <tyler@beyondstudios.us>"
