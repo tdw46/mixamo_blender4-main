@@ -2276,7 +2276,7 @@ def _make_rig(self, context):
         for bone in ctrl_collection.bones:
             pose_bone = rig.pose.bones.get(bone.name)
             if pose_bone:
-                pose_bone.custom_shape_wire_width = 2.0
+                pose_bone.custom_shape_wire_width = 3.0
 
     # tag the armature with a custom prop to specify the control rig is built
     rig.data["mr_control_rig"] = True
