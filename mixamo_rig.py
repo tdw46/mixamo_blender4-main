@@ -4,7 +4,7 @@ from math import *
 from mathutils import *
 from bpy.types import Panel, UIList
 from .utils import *
-from .define import *
+from .definitions.naming import *
 from .lib import animation_compat
 
 
@@ -34,7 +34,7 @@ class MR_OT_update(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            _update(self)
+            _update(self, context)
         finally:
             pass
 
@@ -98,12 +98,12 @@ class MR_OT_edit_custom_shape(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         if context.mode == "POSE":
-            if bpy.context.active_pose_bone:
+            if context.active_pose_bone:
                 return True
 
     def execute(self, context):
         try:
-            cs = bpy.context.active_pose_bone.custom_shape
+            cs = context.active_pose_bone.custom_shape
             if cs:
                 _edit_custom_shape()
             else:
@@ -204,7 +204,7 @@ class MR_OT_make_rig(bpy.types.Operator):
                     # duplicate current skeleton
                     duplicate_object()
                     copy_name = arm.name + "_TEMPANIM"
-                    self.animated_armature = get_object(bpy.context.active_object.name)
+                    self.animated_armature = get_object(context.active_object.name)
                     self.animated_armature.name = copy_name
                     self.animated_armature["mix_to_del"] = True
 
@@ -213,10 +213,10 @@ class MR_OT_make_rig(bpy.types.Operator):
                     set_active_object(arm.name)
 
             # set to rest pose, clear animation
-            _zero_out()
+            _zero_out(context)
 
             # build control rig
-            _make_rig(self)
+            _make_rig(self, context)
 
             if blender_version._float < 291:
                 # Child Of constraints inverse matrix must be set manually in Blender versions < 2.91
@@ -241,7 +241,7 @@ class MR_OT_make_rig(bpy.types.Operator):
 
             if debug == False:
                 restore_armature_layers(layer_select)
-                remove_retarget_cns(bpy.context.active_object)
+                remove_retarget_cns(context.active_object)
                 remove_temp_objects()
                 clean_scene()
 
@@ -272,10 +272,10 @@ class MR_OT_zero_out(bpy.types.Operator):
         return False
 
     def execute(self, context):
-        scn = bpy.context.scene
+        scn = context.scene
 
         try:
-            _zero_out()
+            _zero_out(context)
 
         finally:
             print("")
@@ -297,10 +297,10 @@ class MR_OT_bake_anim(bpy.types.Operator):
         return False
 
     def execute(self, context):
-        scn = bpy.context.scene
+        scn = context.scene
 
         try:
-            _bake_anim(self)
+            _bake_anim(self, context)
 
         finally:
             pass
@@ -324,7 +324,7 @@ class MR_OT_import_anim(bpy.types.Operator):
         return False
 
     def execute(self, context):
-        scn = bpy.context.scene
+        scn = context.scene
         debug = False
         error = False
         layer_select = []
@@ -336,7 +336,7 @@ class MR_OT_import_anim(bpy.types.Operator):
         try:
             layer_select = enable_all_armature_layers()
             # tar_arm = scn.mix_target_armature
-            tar_arm = get_object(bpy.context.active_object.name)
+            tar_arm = get_object(context.active_object.name)
             # src_arm = [i for i in bpy.context.selected_objects if i != tar_arm][0]
             src_arm = scn.mix_source_armature
             print("Source", src_arm.name)
@@ -358,12 +358,12 @@ class MR_OT_import_anim(bpy.types.Operator):
                 except Exception:
                     pass
                 restore_armature_layers(layer_select)
-                remove_retarget_cns(bpy.context.active_object)
+                remove_retarget_cns(context.active_object)
 
                 if scn.mix_source_armature:
                     try:
-                        remove_retarget_cns(mix_source_armature)
-                    except:
+                        remove_retarget_cns(scn.mix_source_armature)
+                    except Exception:
                         pass
 
                 remove_temp_objects()
@@ -438,7 +438,7 @@ def _apply_shape():
     # hide shape
     try:
         hide_object(shape)
-    except:  # weird error 'StructRNA of type Object has been removed'
+    except Exception:  # weird error 'StructRNA of type Object has been removed'
         print("Error, could not hide shape")
         pass
 
@@ -581,16 +581,16 @@ def _reset_inverse_constraints():
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def _update(self):
+def _update(self, context):
     if blender_version._float >= 300:
-        convert_drivers_cs_to_xyz(bpy.context.active_object)
+        convert_drivers_cs_to_xyz(context.active_object)
 
 
-def _make_rig(self):
+def _make_rig(self, context):
     print("\nBuilding control rig...")
 
-    scn = bpy.context.scene
-    rig_name = bpy.context.active_object.name
+    scn = context.scene
+    rig_name = context.active_object.name
     rig = get_object(rig_name)
 
     # Ensure we're in OBJECT mode - do NOT force dependency graph update here
@@ -1062,6 +1062,13 @@ def _make_rig(self):
         c_toe_ik.parent = toes_end
         set_bone_collection(rig, c_toe_ik, coll_ctrl_name)
 
+        # Toe FK Ctrl
+        c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
+        c_toe_fk = create_edit_bone(c_toe_fk_name)
+        copy_bone_transforms(toe, c_toe_fk)
+        c_toe_fk.parent = c_foot_fk
+        set_bone_collection(rig, c_toe_fk, coll_ctrl_name)
+
         # Toe Track
         toe_track_name = leg_rig_names["toes_track"] + _side
         toe_track = create_edit_bone(toe_track_name)
@@ -1085,12 +1092,12 @@ def _make_rig(self):
         toe_02.parent = toe_01_ik
         set_bone_collection(rig, toe_02, coll_intern_name)
 
-        # Toe FK Ctrl
-        c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
-        c_toe_fk = create_edit_bone(c_toe_fk_name)
-        copy_bone_transforms(toe, c_toe_fk)
-        c_toe_fk.parent = foot_fk
-        set_bone_collection(rig, c_toe_fk, coll_ctrl_name)
+        # Foot FK Ctrl
+        c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
+        c_foot_fk = create_edit_bone(c_foot_fk_name)
+        copy_bone_transforms(foot, c_foot_fk)
+        c_foot_fk.parent = c_calf_fk
+        set_bone_collection(rig, c_foot_fk, coll_ctrl_name)
 
         # Foot Roll Cursor Ctrl
         c_foot_roll_cursor_name = c_prefix + leg_rig_names["foot_roll_cursor"] + _side
@@ -2268,10 +2275,10 @@ def _make_rig(self):
     print("  Control rig build complete!")
 
 
-def _zero_out():
+def _zero_out(context):
     print("\nZeroing out...")
-    scn = bpy.context.scene
-    arm = bpy.data.objects.get(bpy.context.active_object.name)
+    scn = context.scene
+    arm = context.object
 
     print("  Clear anim")
     # Store the action for later if needed, then completely clear animation_data
@@ -2290,7 +2297,7 @@ def _zero_out():
                 arm.animation_data.action = None
                 if animation_compat.has_slotted_actions() and hasattr(arm.animation_data, 'action_slot'):
                     arm.animation_data.action_slot = None
-            except:
+            except Exception:
                 pass
 
     print("  Clear pose")
@@ -2306,11 +2313,11 @@ def _zero_out():
     print("Zeroed out.")
 
 
-def _bake_anim(self):
-    scn = bpy.context.scene
+def _bake_anim(self, context):
+    scn = context.scene
 
     # get min-max frame range
-    rig = bpy.context.active_object
+    rig = context.object
 
     if rig.animation_data is None:
         print("No animation data, exit bake")
@@ -3102,7 +3109,7 @@ def update_mixamo_tab():
         bpy.utils.unregister_class(MR_PT_MenuAnim)
         bpy.utils.unregister_class(MR_PT_MenuExport)
         bpy.utils.unregister_class(MR_PT_MenuUpdate)
-    except:
+    except Exception:
         pass
 
     MixamoRigPanel.bl_category = bpy.context.preferences.addons[

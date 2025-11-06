@@ -21,7 +21,7 @@ def get_custom_shape_scale(pbone, uniform=True):
 def get_selected_pbone_name():
     try:
         return bpy.context.selected_pose_bones[0].name#.active_pose_bone.name
-    except:
+    except Exception:
         return
 
 

@@ -1,10 +1,11 @@
-import bpy, os
+import bpy
+import os
 from mathutils import *
 from math import *
 from bpy.app.handlers import persistent
 from operator import itemgetter
 from .utils import *
-from .define import *
+from .definitions.naming import *
 
 fk_leg = [c_prefix+leg_rig_names["thigh_fk"], c_prefix+leg_rig_names["calf_fk"], c_prefix+leg_rig_names["foot_fk"], c_prefix+leg_rig_names["toes_fk"]]
 ik_leg = [leg_rig_names["thigh_ik"], leg_rig_names["calf_ik"], c_prefix+leg_rig_names["foot_ik"], c_prefix+leg_rig_names["pole_ik"], c_prefix+leg_rig_names["toes_ik"], c_prefix+leg_rig_names["foot_01"], c_prefix+leg_rig_names["foot_roll_cursor"], leg_rig_names["foot_snap"]]
@@ -198,7 +199,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
             action = context.active_object.animation_data.action
             if action:
                 self.has_action = True
-        except:
+        except Exception:
             pass
 
         if self.has_action:
@@ -1042,7 +1043,7 @@ class MR_PT_rig_ui(bpy.types.Panel):
         try:
             active_bone = context.selected_pose_bones[0]#context.active_pose_bone
             selected_bone_name = active_bone.name
-        except:
+        except Exception:
             return
 
         side = get_bone_side(selected_bone_name)
@@ -1089,7 +1090,7 @@ classes = (
 def update_mixamo_tab():
     try:
         bpy.utils.unregister_class(MR_PT_rig_ui)
-    except:
+    except Exception:
         pass
 
     MR_PT_rig_ui.bl_category = bpy.context.preferences.addons[__package__].preferences.mixamo_tab_name

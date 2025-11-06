@@ -4,7 +4,7 @@ def update_all_tab_names(self, context):
     try:
         from . import mixamo_rig
         mixamo_rig.update_mixamo_tab()
-    except:
+    except Exception:
         pass
 
 
@@ -22,7 +22,7 @@ def register():
 
     try:
         register_class(MR_MT_addon_preferences)
-    except:
+    except Exception:
         pass
 
 

@@ -18,17 +18,17 @@
 # ***** END GPL LICENCE BLOCK *****
 
 
-bl_info = {
-    "name": "Mixamo Rig for Blender",
-    "author": "Mixamo - Xin + BeyondDev",
-    "version": (1, 0, 1),
-    "blender": (4, 0, 0),
-    "location": "3D View > Mixamo> Control Rig",
-    "description": "Generate a control rig from the selected Mixamo Fbx skeleton",
-    "category": "Animation",
-    "doc_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
-    "tracker_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
-}
+# bl_info = {
+#     "name": "Mixamo Rig",
+#     "author": "Mixamo - Xin + BeyondDev",
+#     "version": (1, 1, 1),
+#     "blender": (4, 2, 0),
+#     "location": "3D View > Mixamo> Control Rig",
+#     "description": "Generate a control rig from the selected Mixamo Fbx skeleton",
+#     "category": "Animation",
+#     "doc_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
+#     "tracker_url": "https://github.com/tdw46/mixamo_blender4-main/tree/main",
+# }
 
 
 if "bpy" in locals():
@@ -42,8 +42,6 @@ if "bpy" in locals():
         importlib.reload(mixamo_rig_functions)
     if "utils" in locals():
         importlib.reload(utils)
-    if "animation" in locals():
-        importlib.reload(animation)
 
 
 import bpy

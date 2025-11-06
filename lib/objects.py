@@ -1,4 +1,5 @@
-import bpy, os
+import bpy
+import os
 
 def delete_object(obj):
     # Safely remove an object from the scene, ensuring no active constraints target it
@@ -27,15 +28,19 @@ def delete_object(obj):
                 obj.select_set(True)
                 bpy.context.view_layer.objects.active = obj
             bpy.ops.object.delete(use_global=False)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error deleting object: {e}")
 
 
 def duplicate_object():
     try:
         bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
-    except:
-        bpy.ops.object.duplicate('TRANSLATION', False)
+    except Exception as e:
+        print(f"Error duplicating object: {e}")
+        try:
+            bpy.ops.object.duplicate('TRANSLATION', False)
+        except Exception as e:
+            print(f"Error duplicating object (fallback): {e}")
 
 
 def get_object(name):
@@ -97,7 +102,7 @@ def append_cs(names=[]):
                 try:
                     collec.objects.link(obj)
                     assigned_collections.append(collec)
-                except:# already in collection
+                except Exception:  # already in collection
                     pass
 
             if len(assigned_collections):
@@ -108,6 +113,5 @@ def append_cs(names=[]):
                 # and the scene collection
                 try:
                     scene.collection.objects.unlink(obj)
-                except:
-                    pass
-                    
+                except Exception as e:
+                    print(f"Error removing object from scene collection: {e}")

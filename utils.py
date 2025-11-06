@@ -1,4 +1,5 @@
-import bpy, os
+import bpy
+import os
 from math import *
 from mathutils import *
 from bpy.types import Panel, UIList

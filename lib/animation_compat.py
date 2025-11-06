@@ -249,7 +249,7 @@ def ensure_fcurve_exists(action, datablock, data_path, index=0):
     if has_slotted_actions() and hasattr(action, 'fcurve_ensure_for_datablock'):
         try:
             return action.fcurve_ensure_for_datablock(datablock, data_path, index=index)
-        except:
+        except Exception:
             pass
     
     # Fallback to legacy API (works in both versions)
