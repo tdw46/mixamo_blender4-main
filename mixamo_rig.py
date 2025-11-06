@@ -2269,6 +2269,15 @@ def _make_rig(self, context):
             # set color group
             set_bone_color_group(rig, pb, "body" + _side.lower())
 
+    # Set custom_shape_wire_width for all control bones
+    print("  Setting wire width for control bones...")
+    ctrl_collection = rig.data.collections.get(coll_ctrl_name)
+    if ctrl_collection:
+        for bone in ctrl_collection.bones:
+            pose_bone = rig.pose.bones.get(bone.name)
+            if pose_bone:
+                pose_bone.custom_shape_wire_width = 2.0
+
     # tag the armature with a custom prop to specify the control rig is built
     rig.data["mr_control_rig"] = True
     
