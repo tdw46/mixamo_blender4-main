@@ -44,9 +44,9 @@ class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
         use_global_undo = context.preferences.edit.use_global_undo
         context.preferences.edit.use_global_undo = False
         # save current autokey state
-        auto_key_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+        auto_key_state = context.scene.tool_settings.use_keyframe_insert_auto
         # set auto key to True
-        bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
+        context.scene.tool_settings.use_keyframe_insert_auto = True
 
         try:
             bname = get_selected_pbone_name()
@@ -55,7 +55,7 @@ class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
             # restore autokey state
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
+            context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
         return {'FINISHED'}
 
@@ -117,9 +117,9 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
         use_global_undo = context.preferences.edit.use_global_undo
         context.preferences.edit.use_global_undo = False
         # save current autokey state
-        auto_key_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+        auto_key_state = context.scene.tool_settings.use_keyframe_insert_auto
         # set auto key to True
-        bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
+        context.scene.tool_settings.use_keyframe_insert_auto = True
 
         try:
             bname = get_selected_pbone_name()
@@ -129,7 +129,7 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
             # restore autokey state
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
+            context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
         return {'FINISHED'}
 
@@ -347,9 +347,9 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
         use_global_undo = context.preferences.edit.use_global_undo
         context.preferences.edit.use_global_undo = False
         # save current autokey state
-        auto_key_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+        auto_key_state = context.scene.tool_settings.use_keyframe_insert_auto
         # set auto key to True
-        bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
+        context.scene.tool_settings.use_keyframe_insert_auto = True
 
         try:
             self.rig = context.active_object
@@ -362,7 +362,7 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
             # restore autokey state
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
+            context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
         return {'FINISHED'}
 
@@ -433,9 +433,9 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
         use_global_undo = context.preferences.edit.use_global_undo
         context.preferences.edit.use_global_undo = False
         # save current autokey state
-        auto_key_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+        auto_key_state = context.scene.tool_settings.use_keyframe_insert_auto
         # set auto key to True
-        bpy.context.scene.tool_settings.use_keyframe_insert_auto = True
+        context.scene.tool_settings.use_keyframe_insert_auto = True
 
         try:
             self.rig = context.active_object
@@ -449,7 +449,7 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
             # restore autokey state
-            bpy.context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
+            context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
         return {'FINISHED'}
 

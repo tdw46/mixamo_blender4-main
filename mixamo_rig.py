@@ -337,7 +337,7 @@ class MR_OT_import_anim(bpy.types.Operator):
             layer_select = enable_all_armature_layers()
             # tar_arm = scn.mix_target_armature
             tar_arm = get_object(context.active_object.name)
-            # src_arm = [i for i in bpy.context.selected_objects if i != tar_arm][0]
+            # src_arm = [i for i in context.selected_objects if i != tar_arm][0]
             src_arm = scn.mix_source_armature
             print("Source", src_arm.name)
             print("Target", tar_arm.name)
@@ -3181,7 +3181,7 @@ class MR_PT_MenuRig(Panel, MixamoRigPanel):
         col = layt.column(align=True)
         col.separator()
 
-        if bpy.context.mode != "EDIT_MESH":
+        if context.mode != "EDIT_MESH":
             col.operator(MR_OT_edit_custom_shape.bl_idname, text="Edit Control Shape")
         else:
             col.operator(MR_OT_apply_shape.bl_idname, text="Apply Control Shape")
