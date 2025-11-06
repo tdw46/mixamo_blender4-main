@@ -2278,6 +2278,9 @@ def _make_rig(self, context):
             if pose_bone:
                 pose_bone.custom_shape_wire_width = 3.0
 
+    # Set rig to not show in front
+    rig.show_in_front = False
+
     # tag the armature with a custom prop to specify the control rig is built
     rig.data["mr_control_rig"] = True
     
