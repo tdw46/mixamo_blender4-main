@@ -1,23 +1,26 @@
 import bpy
-from .maths_geo import *
-from .bones_pose import *
-from .version import *
+from mathutils import Matrix
+
 from . import animation_compat
+from .animation_compat import has_slotted_actions
+from .maths_geo import get_ik_pole_pos
+from .version import blender_version
+
 
 def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True, bake_object=False, ik_data=None):
     scn = bpy.context.scene
     obj_data = []
     bones_data = []
     armature = bpy.data.objects.get(bpy.context.active_object.name)
-    
+
     def get_bones_matrix():
-        matrix = {}        
-        for pbone in armature.pose.bones:            
-            if only_selected and not pbone.bone.select:                
+        matrix = {}
+        for pbone in armature.pose.bones:
+            if only_selected and not pbone.bone.select:
                 continue
-            
-            bmat = pbone.matrix           
-            
+
+            bmat = pbone.matrix
+
             # IK poles
             if pbone.name.startswith("Ctrl_ArmPole") or pbone.name.startswith("Ctrl_LegPole"):
                 b1 = b2 = None
@@ -25,29 +28,29 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 if src_arm is None:
                     print("Error: src_arm not found in ik_data")
                     continue
-                
+
                 type = ""
                 if "Leg" in pbone.name:
-                    type = "Leg"                    
+                    type = "Leg"
                 elif "Arm" in pbone.name:
                     type = "Arm"
-                    
+
                 name_split = pbone.name.split('_')
                 side = name_split[-1]
-                
+
                 if type+side not in ik_data:
                     print(f"Error: {type+side} not found in ik_data")
                     continue
-                
+
                 b1_name, b2_name = ik_data[type+side]
                 b1 = src_arm.pose.bones.get(b1_name)
                 b2 = src_arm.pose.bones.get(b2_name)
-                
+
                 if b1 is None:
                     print(f"Error: Bone {b1_name} not found")
                 if b2 is None:
                     print(f"Error: Bone {b2_name} not found")
-                
+
                 if b1 and b2:
                     _axis = None
                     if type == "Leg":
@@ -57,14 +60,14 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                             _axis = b2.x_axis
                         elif side == "Right":
                             _axis = -b2.x_axis
-                    
+
                     try:
                         pole_pos = get_ik_pole_pos(b1, b2, method=2, axis=_axis)
                         bmat = Matrix.Translation(pole_pos)
                     except AttributeError as e:
                         print(f"Error in get_ik_pole_pos: {str(e)}")
                         continue
-                    
+
                     # Child Of constraints are preserved after baking
                     # need to compensate the matrix with the Child Of transformation
                     child_of_cns = pbone.constraints.get("Child Of")
@@ -81,9 +84,9 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 else:
                     print(f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}")
                     continue
-            
-            matrix[pbone.name] = armature.convert_space(pose_bone=pbone, matrix=bmat, from_space="POSE", to_space="LOCAL") 
-            
+
+            matrix[pbone.name] = armature.convert_space(pose_bone=pbone, matrix=bmat, from_space="POSE", to_space="LOCAL")
+
         return matrix
 
     def get_obj_matrix():
@@ -119,12 +122,12 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
         keyframes[fc_key].extend((fra, val))
 
 
-    # set transforms and store keyframes       
+    # set transforms and store keyframes
     if bake_bones:
-        for pb in armature.pose.bones:        
+        for pb in armature.pose.bones:
             if only_selected and not pb.bone.select:
                 continue
-            
+
             euler_prev = None
             quat_prev = None
             keyframes = {}
@@ -136,7 +139,7 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     store_keyframe(pb.name, "location", arr_idx, f, value)
 
                 rotation_mode = pb.rotation_mode
-                
+
                 if rotation_mode == 'QUATERNION':
                     if quat_prev is not None:
                         quat = pb.rotation_quaternion.copy()
@@ -166,11 +169,11 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
 
                     for arr_idx, value in enumerate(pb.rotation_euler):
                         store_keyframe(pb.name, "rotation_euler", arr_idx, f, value)
-                    
+
                 for arr_idx, value in enumerate(pb.scale):
                     store_keyframe(pb.name, "scale", arr_idx, f, value)
-                    
-            
+
+
             # Add keyframes (use ensure API so 4.4+ creates slot/layer/strip)
             for fc_key, key_values in keyframes.items():
                 data_path, index = fc_key
@@ -186,14 +189,14 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 num_keys = len(key_values) // 2
                 fcurve.keyframe_points.add(num_keys)
                 fcurve.keyframe_points.foreach_set('co', key_values)
-                
+
                 if blender_version._float >= 290:# internal error when doing so with Blender 2.83, only for Blender 2.90 and higher
                     linear_enum_value = bpy.types.Keyframe.bl_rna.properties['interpolation'].enum_items['LINEAR'].value
                     fcurve.keyframe_points.foreach_set('interpolation', (linear_enum_value,) * num_keys)
                 else:
                     for kf in fcurve.keyframe_points:
                         kf.interpolation = 'LINEAR'
-                
+
 
     if bake_object:
         euler_prev = None

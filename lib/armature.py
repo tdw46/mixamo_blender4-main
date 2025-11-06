@@ -1,5 +1,6 @@
 import bpy
 
+
 def restore_armature_layers(layers_select):
     # restore the armature layers visibility
     # ~ for i in range(0, 32):

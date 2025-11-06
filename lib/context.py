@@ -1,5 +1,6 @@
 import bpy
 
+
 def get_current_mode():
     return bpy.context.mode
 

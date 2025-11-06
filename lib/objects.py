@@ -1,5 +1,7 @@
-import bpy
 import os
+
+import bpy
+
 
 def delete_object(obj):
     # Safely remove an object from the scene, ensuring no active constraints target it
@@ -108,7 +110,7 @@ def append_cs(names=[]):
             if len(assigned_collections):
                 # remove previous collections
                 for i in obj.users_collection:
-                    if not i in assigned_collections:
+                    if i not in assigned_collections:
                         i.objects.unlink(obj)
                 # and the scene collection
                 try:

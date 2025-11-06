@@ -1,6 +1,8 @@
 import bpy
-from .objects import *
-from .version import *
+
+from .objects import append_cs, get_object
+from .version import blender_version
+
 
 def get_custom_shape_scale(pbone, uniform=True):
     if blender_version._float >= 300:

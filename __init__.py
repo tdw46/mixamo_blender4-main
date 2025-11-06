@@ -35,20 +35,18 @@ if "bpy" in locals():
     import importlib
 
     if "mixamo_rig_prefs" in locals():
-        importlib.reload(mixamo_rig_prefs)
+        importlib.reload(mixamo_rig_prefs)  # noqa: F821
     if "mixamo_rig" in locals():
-        importlib.reload(mixamo_rig)
+        importlib.reload(mixamo_rig)  # noqa: F821
     if "mixamo_rig_functions" in locals():
-        importlib.reload(mixamo_rig_functions)
+        importlib.reload(mixamo_rig_functions)  # noqa: F821
     if "utils" in locals():
-        importlib.reload(utils)
+        importlib.reload(utils)  # noqa: F821
 
 
 import bpy
-from . import mixamo_rig_prefs
-from . import mixamo_rig
-from . import mixamo_rig_functions
-from . import utils
+
+from . import mixamo_rig, mixamo_rig_functions, mixamo_rig_prefs, utils
 
 
 def register():

@@ -1,5 +1,6 @@
 import bpy
 
+
 class ARP_blender_version:
     _string = bpy.app.version_string
     blender_v = bpy.app.version
@@ -16,7 +17,7 @@ def convert_drivers_cs_to_xyz(armature):
 
     for dr in drivers_armature:
         if 'custom_shape_scale' in dr.data_path:
-            if not 'custom_shape_scale_xyz' in dr.data_path:
+            if 'custom_shape_scale_xyz' not in dr.data_path:
                 for i in range(0, 3):
                     new_dr = armature.animation_data.drivers.from_existing(src_driver=dr)
                     new_dr.data_path = new_dr.data_path.replace('custom_shape_scale', 'custom_shape_scale_xyz')

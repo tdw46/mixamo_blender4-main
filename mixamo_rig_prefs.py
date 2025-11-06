@@ -1,5 +1,6 @@
 import bpy
 
+
 def update_all_tab_names(self, context):
     try:
         from . import mixamo_rig

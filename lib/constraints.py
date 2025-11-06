@@ -1,13 +1,14 @@
 import bpy
 
-def add_copy_transf(p_bone, tgt, subtgt):  
+
+def add_copy_transf(p_bone, tgt, subtgt):
     cns_transf = p_bone.constraints.get("Copy Transforms")
     if cns_transf == None:
         cns_transf = p_bone.constraints.new("COPY_TRANSFORMS")
         cns_transf.name = "Copy Transforms"
     cns_transf.target = tgt
     cns_transf.subtarget = subtgt
-    
+
 
 def set_constraint_inverse_matrix(cns):
     # set the inverse matrix of Child Of constraint

@@ -1,16 +1,55 @@
-import bpy
 import os
-from mathutils import *
-from math import *
-from bpy.app.handlers import persistent
+from math import degrees, radians
 from operator import itemgetter
-from .utils import *
-from .definitions.naming import *
 
-fk_leg = [c_prefix+leg_rig_names["thigh_fk"], c_prefix+leg_rig_names["calf_fk"], c_prefix+leg_rig_names["foot_fk"], c_prefix+leg_rig_names["toes_fk"]]
-ik_leg = [leg_rig_names["thigh_ik"], leg_rig_names["calf_ik"], c_prefix+leg_rig_names["foot_ik"], c_prefix+leg_rig_names["pole_ik"], c_prefix+leg_rig_names["toes_ik"], c_prefix+leg_rig_names["foot_01"], c_prefix+leg_rig_names["foot_roll_cursor"], leg_rig_names["foot_snap"]]
-fk_arm = [c_prefix+arm_rig_names["arm_fk"], c_prefix+arm_rig_names["forearm_fk"], c_prefix+arm_rig_names["hand_fk"]]
-ik_arm = [arm_rig_names["arm_ik"], arm_rig_names["forearm_ik"], c_prefix+arm_rig_names["hand_ik"], c_prefix+arm_rig_names["pole_ik"]]
+import bpy
+from bpy.app.handlers import persistent
+from mathutils import Matrix, Vector
+
+# Import from definitions
+from .definitions.naming import (
+    arm_rig_names,
+    c_prefix,
+    leg_rig_names,
+)
+from .lib.animation import bake_anim
+
+# Import from lib modules
+from .lib.bones_pose import get_pose_bone, get_selected_pbone_name, update_transform
+from .lib.maths_geo import (
+    get_ik_pole_pos,
+    get_pole_angle,
+    get_pose_matrix_in_other_space,
+)
+from .lib.mixamo import get_bone_side, get_mixamo_prefix
+
+fk_leg = [
+    c_prefix+leg_rig_names["thigh_fk"],
+    c_prefix+leg_rig_names["calf_fk"],
+    c_prefix+leg_rig_names["foot_fk"],
+    c_prefix+leg_rig_names["toes_fk"],
+]
+ik_leg = [
+    leg_rig_names["thigh_ik"],
+    leg_rig_names["calf_ik"],
+    c_prefix+leg_rig_names["foot_ik"],
+    c_prefix+leg_rig_names["pole_ik"],
+    c_prefix+leg_rig_names["toes_ik"],
+    c_prefix+leg_rig_names["foot_01"],
+    c_prefix+leg_rig_names["foot_roll_cursor"],
+    leg_rig_names["foot_snap"],
+]
+fk_arm = [
+    c_prefix+arm_rig_names["arm_fk"],
+    c_prefix+arm_rig_names["forearm_fk"],
+    c_prefix+arm_rig_names["hand_fk"],
+]
+ik_arm = [
+    arm_rig_names["arm_ik"],
+    arm_rig_names["forearm_ik"],
+    c_prefix+arm_rig_names["hand_ik"],
+    c_prefix+arm_rig_names["pole_ik"],
+]
 
 ################## OPERATOR CLASSES ###################
 
@@ -552,7 +591,10 @@ def snap_pos_matrix(pose_bone, target_bone_matrix):
 
         if child_of_cns != None:
             if child_of_cns.subtarget != "" and get_pose_bone(child_of_cns.subtarget):
-                pose_bone.matrix = get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted() @ target_bone_matrix
+                subtarget_inv = get_pose_bone(
+                    child_of_cns.subtarget
+                ).matrix_channel.inverted()
+                pose_bone.matrix = subtarget_inv @ target_bone_matrix
                 update_transform()
             else:
                 pose_bone.matrix = target_bone_matrix.copy()
@@ -699,7 +741,9 @@ def ik_to_fk_arm(self):
         if parent_type == "object":
             bone_parent = bpy.data.objects[bparent_name]
             obj_par = bpy.data.objects[bparent_name]
-            hand_ik.matrix = constraint.inverse_matrix.inverted() @ obj_par.matrix_world.inverted() @ hand_fk.matrix
+            inv_constraint = constraint.inverse_matrix.inverted()
+            inv_world = obj_par.matrix_world.inverted()
+            hand_ik.matrix = inv_constraint @ inv_world @ hand_fk.matrix
     else:
         hand_ik.matrix = hand_fk.matrix
 
@@ -894,7 +938,9 @@ def ik_to_fk_leg(self):
             foot_ik.matrix = bone_parent.matrix_channel.inverted() @ foot_fk.matrix
         if parent_type == "object":
             ob = bpy.data.objects[bparent_name]
-            foot_ik.matrix = constraint.inverse_matrix.inverted() @ ob.matrix_world.inverted() @ foot_fk.matrix
+            inv_constraint = constraint.inverse_matrix.inverted()
+            inv_world = ob.matrix_world.inverted()
+            foot_ik.matrix = inv_constraint @ inv_world @ foot_fk.matrix
 
     else:
         foot_ik.matrix = foot_fk.matrix
@@ -980,7 +1026,7 @@ def is_selected(names, selected_bone_name, startswith=False):
     if startswith == False:
         if type(names) == list:
             for name in names:
-                if not "." in name[-2:]:
+                if "." not in name[-2:]:
                     if name + _side == selected_bone_name:
                         return True
                 else:
@@ -1032,7 +1078,7 @@ class MR_PT_rig_ui(bpy.types.Panel):
 
         # check if a Mixamo ctrl rig is selected
         if len(rig.data.keys()):
-            if not 'mr_control_rig' in rig.data.keys():
+            if 'mr_control_rig' not in rig.data.keys():
                 return
         else:
             return
@@ -1050,22 +1096,32 @@ class MR_PT_rig_ui(bpy.types.Panel):
         prefix = get_mixamo_prefix()
 
        # Leg
-        if (is_selected(fk_leg, selected_bone_name) or is_selected(ik_leg, selected_bone_name)):
+        is_leg = (
+            is_selected(fk_leg, selected_bone_name)
+            or is_selected(ik_leg, selected_bone_name)
+        )
+        if is_leg:
             # IK-FK Switch
             col = layout.column(align=True)
             #foot_base = get_pose_bone(prefix+side.title()+'Foot')
-            c_foot_ik = get_pose_bone(c_prefix+leg_rig_names["foot_ik"]+'_'+side.title())
+            foot_ik_name = c_prefix + leg_rig_names["foot_ik"] + '_' + side.title()
+            c_foot_ik = get_pose_bone(foot_ik_name)
             col.prop(c_foot_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK/FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
 
 
         # Arm
-        if is_selected(fk_arm, selected_bone_name) or is_selected(ik_arm, selected_bone_name):
+        is_arm = (
+            is_selected(fk_arm, selected_bone_name)
+            or is_selected(ik_arm, selected_bone_name)
+        )
+        if is_arm:
             # IK-FK Switch
             col = layout.column(align=True)
             #hand_base = get_pose_bone(prefix+side.title()+'Hand')
-            c_hand_ik = get_pose_bone(c_prefix+arm_rig_names["hand_ik"]+'_'+side.title())
+            hand_ik_name = c_prefix + arm_rig_names["hand_ik"] + '_' + side.title()
+            c_hand_ik = get_pose_bone(hand_ik_name)
             col.prop(c_hand_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK-FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
@@ -1093,7 +1149,8 @@ def update_mixamo_tab():
     except Exception:
         pass
 
-    MR_PT_rig_ui.bl_category = bpy.context.preferences.addons[__package__].preferences.mixamo_tab_name
+    prefs = bpy.context.preferences.addons[__package__].preferences
+    MR_PT_rig_ui.bl_category = prefs.mixamo_tab_name
     bpy.utils.register_class(MR_PT_rig_ui)
 
 
@@ -1105,7 +1162,11 @@ def register():
 
     update_mixamo_tab()
 
-    bpy.types.Scene.mix_show_ik_fk_advanced = bpy.props.BoolProperty(name="Show IK-FK operators", description="Show IK-FK manual operators", default=False)
+    bpy.types.Scene.mix_show_ik_fk_advanced = bpy.props.BoolProperty(
+        name="Show IK-FK operators",
+        description="Show IK-FK manual operators",
+        default=False,
+    )
 
 
 def unregister():

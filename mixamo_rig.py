@@ -1,11 +1,85 @@
-import bpy
 import math
-from math import *
-from mathutils import *
-from bpy.types import Panel, UIList
-from .utils import *
-from .definitions.naming import *
+from math import degrees, pi, radians
+
+import bpy
+from bpy.types import Panel
+from mathutils import Matrix, Vector
+
+# Import naming constants
+from .definitions.naming import (
+    arm_names,
+    arm_rig_names,
+    c_prefix,
+    fingers_type,
+    head_names,
+    head_rig_names,
+    leg_names,
+    leg_rig_names,
+    master_rig_names,
+    spine_names,
+    spine_rig_names,
+)
+
+# Import lib functions
 from .lib import animation_compat
+from .lib.animation import bake_anim
+from .lib.armature import (
+    enable_all_armature_layers,
+    restore_armature_layers,
+)
+from .lib.bones_data import set_bone_collection
+from .lib.bones_edit import copy_bone_transforms, create_edit_bone, get_edit_bone
+from .lib.bones_pose import (
+    get_custom_shape_scale,
+    get_pose_bone,
+    lock_pbone_transform,
+    set_bone_color_group,
+    set_bone_custom_shape,
+)
+from .lib.constraints import (
+    add_copy_transf,
+    set_constraint_inverse_matrix,
+)
+from .lib.custom_props import create_custom_prop
+from .lib.drivers import add_driver_to_prop
+from .lib.maths_geo import (
+    align_bone_x_axis,
+    align_bone_z_axis,
+    get_pole_angle,
+    mat3_to_vec_roll,
+    project_point_onto_plane,
+    project_vector_onto_plane,
+    rotate_point,
+    signed_angle,
+    vec_roll_to_mat3,
+)
+from .lib.mixamo import get_mix_name
+from .lib.objects import (
+    append_cs,
+    delete_object,
+    duplicate_object,
+    get_object,
+    hide_object,
+    set_active_object,
+)
+from .lib.version import (
+    blender_version,
+    convert_drivers_cs_to_xyz,
+    get_custom_shape_scale_prop_name,
+)
+
+
+# UTILITY FUNCTIONS
+####################
+def search_layer_collection(layer_collection, collection_name):
+    """Recursively search for a layer collection by name."""
+    if layer_collection.name == collection_name:
+        return layer_collection
+    for child in layer_collection.children:
+        result = search_layer_collection(child, collection_name)
+        if result:
+            return result
+    return None
 
 
 # OPERATOR CLASSES
@@ -129,12 +203,18 @@ class MR_OT_make_rig(bpy.types.Operator):
     )
     ik_arms: bpy.props.BoolProperty(
         name="IK Hands",
-        description="Use IK for arm bones, otherwise use FK (can be toggled later using the rig properties)",
+        description=(
+            "Use IK for arm bones, otherwise use FK "
+            "(can be toggled later using the rig properties)"
+        ),
         default=True,
     )
     ik_legs: bpy.props.BoolProperty(
         name="IK Legs",
-        description="Use IK for leg bones, otherwise use FK (can be toggled later using the rig properties)",
+        description=(
+            "Use IK for leg bones, otherwise use FK "
+            "(can be toggled later using the rig properties)"
+        ),
         default=True,
     )
     animated_armature = None
@@ -143,7 +223,7 @@ class MR_OT_make_rig(bpy.types.Operator):
     def poll(cls, context):
         if context.active_object:
             if context.active_object.type == "ARMATURE":
-                if not "mr_control_rig" in context.active_object.data.keys():
+                if "mr_control_rig" not in context.active_object.data.keys():
                     return True
         return False
 
@@ -170,12 +250,18 @@ class MR_OT_make_rig(bpy.types.Operator):
                 return {'CANCELLED'}
 
             original_mode = context.active_object.mode
-            
+
             # Validate the mode is a valid string
-            if not isinstance(original_mode, str) or original_mode not in ['OBJECT', 'EDIT', 'POSE', 'SCULPT', 'VERTEX_PAINT', 'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT', 'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'PAINT_GPENCIL', 'WEIGHT_GPENCIL', 'VERTEX_GPENCIL']:
+            valid_modes = [
+                'OBJECT', 'EDIT', 'POSE', 'SCULPT', 'VERTEX_PAINT',
+                'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT',
+                'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'PAINT_GPENCIL',
+                'WEIGHT_GPENCIL', 'VERTEX_GPENCIL'
+            ]
+            if not isinstance(original_mode, str) or original_mode not in valid_modes:
                 print(f"WARNING: Invalid mode '{original_mode}', defaulting to OBJECT")
                 original_mode = 'OBJECT'
-            
+
             # Switch to OBJECT mode IMMEDIATELY as first operation
             if original_mode != 'OBJECT':
                 try:
@@ -199,7 +285,7 @@ class MR_OT_make_rig(bpy.types.Operator):
             # animation import: initial steps
             if self.bake_anim:
                 if (
-                    not "mr_control_rig" in arm.data.keys()
+                    "mr_control_rig" not in arm.data.keys()
                 ):  # only if the control rig is not already built
                     # duplicate current skeleton
                     duplicate_object()
@@ -219,7 +305,8 @@ class MR_OT_make_rig(bpy.types.Operator):
             _make_rig(self, context)
 
             if blender_version._float < 291:
-                # Child Of constraints inverse matrix must be set manually in Blender versions < 2.91
+                # Child Of constraints inverse matrix must be set manually
+                # in Blender versions < 2.91
                 print("Set inverse ChildOf")
                 _reset_inverse_constraints()
 
@@ -231,7 +318,8 @@ class MR_OT_make_rig(bpy.types.Operator):
             ks = context.scene.keying_sets_all
             try:
                 ks.active = ks["Location & Rotation"]
-            except:  # doesn't exist in older Blender versions
+            except (KeyError, AttributeError):
+                # doesn't exist in older Blender versions
                 pass
 
         finally:
@@ -239,7 +327,7 @@ class MR_OT_make_rig(bpy.types.Operator):
             _safe_deselect_all()
             set_active_object(arm.name)
 
-            if debug == False:
+            if not debug:
                 restore_armature_layers(layer_select)
                 remove_retarget_cns(context.active_object)
                 remove_temp_objects()
@@ -249,7 +337,8 @@ class MR_OT_make_rig(bpy.types.Operator):
 
         # LAST THING: Restore original mode after ALL operations complete
         try:
-            print(f"DEBUG: Restoring mode to: '{original_mode}' (type: {type(original_mode)})")
+            mode_type = type(original_mode)
+            print(f"DEBUG: Restoring mode to: '{original_mode}' (type: {mode_type})")
             if original_mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode=original_mode)
         except Exception as e:
@@ -272,7 +361,6 @@ class MR_OT_zero_out(bpy.types.Operator):
         return False
 
     def execute(self, context):
-        scn = context.scene
 
         try:
             _zero_out(context)
@@ -297,7 +385,6 @@ class MR_OT_bake_anim(bpy.types.Operator):
         return False
 
     def execute(self, context):
-        scn = context.scene
 
         try:
             _bake_anim(self, context)
@@ -329,7 +416,7 @@ class MR_OT_import_anim(bpy.types.Operator):
         error = False
         layer_select = []
 
-        if scn.mix_source_armature == None:
+        if scn.mix_source_armature is None:
             self.report({"ERROR"}, "Source armature must be set")
             return {"FINISHED"}
 
@@ -349,7 +436,7 @@ class MR_OT_import_anim(bpy.types.Operator):
         #    print("Error")
 
         finally:
-            if debug == False:
+            if not debug:
                 # Ensure the control rig is active before restoring layers
                 try:
                     _safe_deselect_all()
@@ -457,14 +544,15 @@ def _edit_custom_shape():
 
     bpy.ops.object.posemode_toggle()
 
-    # make sure the active collection is not hidden, otherwise we can't access the newly created object data
+    # make sure the active collection is not hidden,
+    # otherwise we can't access the newly created object data
     active_collec = bpy.context.layer_collection
     if not active_collec.is_visible:
         for col in rig.users_collection:
             layer_col = search_layer_collection(
                 bpy.context.view_layer.layer_collection, col.name
             )
-            if layer_col.hide_viewport == False and col.hide_viewport == False:
+            if not layer_col.hide_viewport and not col.hide_viewport:
                 bpy.context.view_layer.active_layer_collection = layer_col
                 break
 
@@ -514,12 +602,12 @@ def clean_scene():
         if cs_grp.name in bpy.context.view_layer.objects:
             hide_object(cs_grp)
         else:
-            print(f"Warning: Object 'cs_grp' is not in the current View Layer.")
+            print("Warning: Object 'cs_grp' is not in the current View Layer.")
 
     # Always show custom shapes and set collection visibility
     if bpy.context.object and bpy.context.object.type == "ARMATURE":
         bpy.context.object.data.show_bone_custom_shapes = True
-        
+
         # Set bone collection visibility - only CTRL visible
         # Use .collections instead of .collections_all for safe property assignment
         for coll in bpy.context.object.data.collections:
@@ -537,7 +625,8 @@ def init_armature_transforms(rig):
     set_active_object(rig.name)
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    # first unparent children meshes (init scale messed up children scale in Blender 2.8)
+    # first unparent children meshes
+    # (init scale messed up children scale in Blender 2.8)
     child_par_dict = {}
     for child in bpy.data.objects[rig.name].children:
         bone_parent = None
@@ -558,7 +647,7 @@ def init_armature_transforms(rig):
         child = bpy.data.objects.get(child_name)
         child_mat = child.matrix_world.copy()
         child.parent = bpy.data.objects[rig.name]
-        if child_par_dict[child_name] != None:  # bone parent
+        if child_par_dict[child_name] is not None:  # bone parent
             child.parent_type = "BONE"
             child.parent_bone = child_par_dict[child_name]
 
@@ -589,7 +678,6 @@ def _update(self, context):
 def _make_rig(self, context):
     print("\nBuilding control rig...")
 
-    scn = context.scene
     rig_name = context.active_object.name
     rig = get_object(rig_name)
 
@@ -654,7 +742,7 @@ def _make_rig(self, context):
                 break
     except Exception as e:
         print(f"  Warning: Could not detect prefix: {e}")
-    
+
     if not detected_prefix:
         print("  No Mixamo prefix detected, using plain bone names")
 
@@ -668,7 +756,7 @@ def _make_rig(self, context):
     # ==========================================
     print("  Phase 1: Creating all edit bones...")
     bpy.ops.object.mode_set(mode="EDIT")
-    
+
     # Data structures to store information needed for pose mode
     edit_data = {
         'master': {},
@@ -679,7 +767,7 @@ def _make_rig(self, context):
         'arm_left': {},
         'arm_right': {}
     }
-    
+
     # Master bones
     print("    Creating Master bones...")
     c_master = create_edit_bone(c_master_name)
@@ -690,14 +778,14 @@ def _make_rig(self, context):
     if not ctrl_collection:
         ctrl_collection = rig.data.collections.new(coll_ctrl_name)
     ctrl_collection.assign(c_master)
-    
+
     # Spine bones
     print("    Creating Spine bones...")
     hips_name = get_src_bone_name(spine_names["pelvis"])
     spine_name = get_src_bone_name(spine_names["spine1"])
     spine1_name = get_src_bone_name(spine_names["spine2"])
     spine2_name = get_src_bone_name(spine_names["spine3"])
-    
+
     hips = get_edit_bone(hips_name)
     spine = get_edit_bone(spine_name)
     spine1 = get_edit_bone(spine1_name)
@@ -755,7 +843,7 @@ def _make_rig(self, context):
         copy_bone_transforms(spine2, c_spine2)
         c_spine2.parent = c_spine1
         set_bone_collection(rig, c_spine2, coll_ctrl_name)
-        
+
         # Store data for pose mode
         edit_data['spine'] = {
             'exists': True,
@@ -773,7 +861,7 @@ def _make_rig(self, context):
     else:
         print("    Spine bones are missing, skip spine")
         edit_data['spine']['exists'] = False
-    
+
     # Head bones
     print("    Creating Head bones...")
     neck_name = get_src_bone_name(head_names["neck"])
@@ -801,7 +889,7 @@ def _make_rig(self, context):
         copy_bone_transforms(head, c_head)
         c_head.parent = c_neck
         set_bone_collection(rig, c_head, coll_ctrl_name)
-        
+
         edit_data['head'] = {
             'exists': True,
             'neck_name': neck_name,
@@ -812,7 +900,7 @@ def _make_rig(self, context):
     else:
         print("    Head or neck bones are missing, skip head")
         edit_data['head']['exists'] = False
-    
+
     # Leg bones for both sides
     for side in ['Left', 'Right']:
         print(f"    Creating Leg bones for {side}...")
@@ -900,7 +988,7 @@ def _make_rig(self, context):
         calf_ik_exist = get_edit_bone(calf_ik_name)
 
         calf_ik = create_edit_bone(calf_ik_name)
-        if calf_ik_exist == None:
+        if calf_ik_exist is None:
             copy_bone_transforms(calf, calf_ik)
         calf_ik.head = thigh_ik.tail.copy()
         calf_ik.tail = foot.head.copy()
@@ -1170,7 +1258,7 @@ def _make_rig(self, context):
             'foot_01_pole_name': foot_01_pole_name,
             'ik_pole_angle': ik_pole_angle
         }
-    
+
     # Arm bones for both sides
     for side in ['Left', 'Right']:
         print(f"    Creating Arm bones for {side}...")
@@ -1203,7 +1291,7 @@ def _make_rig(self, context):
                     side + "Hand" + fname + str(i), use_name_prefix
                 )
                 finger = get_edit_bone(finger_name)
-                if finger == None:
+                if finger is None:
                     continue
 
                 fingers_names.append(finger_name)
@@ -1412,9 +1500,9 @@ def _make_rig(self, context):
     if edit_data['spine'].get('exists'):
         print("    Setting up Spine pose...")
         spine_data = edit_data['spine']
-        
+
         c_hips_pb = get_pose_bone(spine_data['c_hips_name'])
-        hips_helper_pb = get_pose_bone(spine_data['hips_free_h_name'])
+        get_pose_bone(spine_data['hips_free_h_name'])
         c_hips_free_pb = get_pose_bone(spine_data['c_hips_free_name'])
         c_spine_pb = get_pose_bone(spine_data['c_spine_name'])
         c_spine1_pb = get_pose_bone(spine_data['c_spine1_name'])
@@ -1448,20 +1536,24 @@ def _make_rig(self, context):
         # constraints
         mixamo_spine_pb = get_pose_bone(spine_data['hips_name'])
         cns = mixamo_spine_pb.constraints.get("Copy Transforms")
-        if cns == None:
+        if cns is None:
             cns = mixamo_spine_pb.constraints.new("COPY_TRANSFORMS")
             cns.name = "Copy Transforms"
         cns.target = rig
         cns.subtarget = spine_data['hips_free_h_name']
 
         # Spine
-        spine_bone_matches = {"1": spine_data['c_spine_name'], "2": spine_data['c_spine1_name'], "3": spine_data['c_spine2_name']}
+        spine_bone_matches = {
+            "1": spine_data['c_spine_name'],
+            "2": spine_data['c_spine1_name'],
+            "3": spine_data['c_spine2_name'],
+        }
         for str_idx in spine_bone_matches:
             c_name = spine_bone_matches[str_idx]
             mixamo_bname = get_src_bone_name(spine_names["spine" + str_idx])
             mixamo_spine_pb = get_pose_bone(mixamo_bname)
             cns = mixamo_spine_pb.constraints.get("Copy Transforms")
-            if cns == None:
+            if cns is None:
                 cns = mixamo_spine_pb.constraints.new("COPY_TRANSFORMS")
                 cns.name = "Copy Transforms"
             cns.target = rig
@@ -1471,7 +1563,7 @@ def _make_rig(self, context):
     if edit_data['head'].get('exists'):
         print("    Setting up Head pose...")
         head_data = edit_data['head']
-        
+
         c_neck_pb = get_pose_bone(head_data['c_neck_name'])
         c_head_pb = get_pose_bone(head_data['c_head_name'])
 
@@ -1482,6 +1574,11 @@ def _make_rig(self, context):
         # set custom shapes
         set_bone_custom_shape(c_neck_pb, "cs_neck")
         set_bone_custom_shape(c_head_pb, "cs_head")
+
+        # set custom shape scale for head controller
+        c_head_pb.custom_shape_scale_xyz[0] = 1.9
+        c_head_pb.custom_shape_scale_xyz[1] = 1.9
+        c_head_pb.custom_shape_scale_xyz[2] = 1.9
 
         # set rotation mode
         c_neck_pb.rotation_mode = "XYZ"
@@ -1502,7 +1599,7 @@ def _make_rig(self, context):
     for side in ['left', 'right']:
         if not edit_data[f'leg_{side}'].get('exists'):
             continue
-            
+
         print(f"    Setting up Leg pose for {side}...")
         leg_data = edit_data[f'leg_{side}']
         _side = "_" + leg_data['side']
@@ -1534,7 +1631,7 @@ def _make_rig(self, context):
         # Calf IK constraint
         cns_name = "IK"
         ik_cns = calf_ik_pb.constraints.get(cns_name)
-        if ik_cns == None:
+        if ik_cns is None:
             ik_cns = calf_ik_pb.constraints.new("IK")
             ik_cns.name = cns_name
         ik_cns.target = rig
@@ -1552,7 +1649,7 @@ def _make_rig(self, context):
         # Foot IK constraints
         cns_name = "Copy Location"
         copy_loc_cns = foot_ik_pb.constraints.get(cns_name)
-        if copy_loc_cns == None:
+        if copy_loc_cns is None:
             copy_loc_cns = foot_ik_pb.constraints.new("COPY_LOCATION")
             copy_loc_cns.name = cns_name
         copy_loc_cns.target = rig
@@ -1561,7 +1658,7 @@ def _make_rig(self, context):
 
         cns_name = "TrackTo"
         cns = foot_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = foot_ik_pb.constraints.new("TRACK_TO")
             cns.name = cns_name
         cns.target = rig
@@ -1573,7 +1670,7 @@ def _make_rig(self, context):
 
         cns_name = "Locked Track"
         cns = foot_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = foot_ik_pb.constraints.new("LOCKED_TRACK")
             cns.name = cns_name
         cns.target = rig
@@ -1584,7 +1681,7 @@ def _make_rig(self, context):
 
         cns_name = "Copy Scale"
         cns = foot_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = foot_ik_pb.constraints.new("COPY_SCALE")
             cns.name = cns_name
         cns.target = rig
@@ -1593,7 +1690,7 @@ def _make_rig(self, context):
         # Foot Ctrl IK
         cns_name = "Child Of"
         cns = c_foot_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = c_foot_ik_pb.constraints.new("CHILD_OF")
             cns.name = cns_name
         cns.target = rig
@@ -1602,7 +1699,7 @@ def _make_rig(self, context):
         # Pole IK
         cns_name = "Child Of"
         child_cns = c_pole_ik_pb.constraints.get(cns_name)
-        if child_cns == None:
+        if child_cns is None:
             child_cns = c_pole_ik_pb.constraints.new("CHILD_OF")
             child_cns.name = cns_name
         child_cns.target = rig
@@ -1615,7 +1712,7 @@ def _make_rig(self, context):
 
         cns_name = "Transformation"
         cns = toes_end_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = toes_end_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
@@ -1634,7 +1731,7 @@ def _make_rig(self, context):
 
         cns_name = "Limit Rotation"
         cns = toes_end_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = toes_end_pb.constraints.new("LIMIT_ROTATION")
             cns.name = cns_name
         cns.owner_space = "LOCAL"
@@ -1645,7 +1742,7 @@ def _make_rig(self, context):
         # Toe 01 ik
         cns_name = "Copy Transforms"
         cns = toe_01_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = toe_01_ik_pb.constraints.new("COPY_TRANSFORMS")
             cns.name = cns_name
         cns.target = rig
@@ -1656,7 +1753,7 @@ def _make_rig(self, context):
         # Toe 02
         cns_name = "Copy CopyRotation"
         cns = toe_02_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = toe_02_pb.constraints.new("COPY_ROTATION")
             cns.name = cns_name
         cns.target = rig
@@ -1667,7 +1764,7 @@ def _make_rig(self, context):
         # Toe Track
         cns_name = "TrackTo"
         cns = toe_track_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = toe_track_pb.constraints.new("TRACK_TO")
             cns.name = cns_name
         cns.target = rig
@@ -1682,7 +1779,7 @@ def _make_rig(self, context):
 
         cns_name = "Transformation"
         cns = heel_mid_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_mid_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
@@ -1701,7 +1798,7 @@ def _make_rig(self, context):
 
         cns_name = "Limit Rotation"
         cns = heel_mid_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_mid_pb.constraints.new("LIMIT_ROTATION")
             cns.name = cns_name
         cns.use_limit_x = True
@@ -1714,7 +1811,7 @@ def _make_rig(self, context):
 
         cns_name = "Transformation"
         cns = heel_in_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_in_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
@@ -1733,7 +1830,7 @@ def _make_rig(self, context):
 
         cns_name = "Limit Rotation"
         cns = heel_in_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_in_pb.constraints.new("LIMIT_ROTATION")
             cns.name = cns_name
         cns.use_limit_y = True
@@ -1752,7 +1849,7 @@ def _make_rig(self, context):
 
         cns_name = "Transformation"
         cns = heel_out_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_out_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
@@ -1771,7 +1868,7 @@ def _make_rig(self, context):
 
         cns_name = "Limit Rotation"
         cns = heel_out_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = heel_out_pb.constraints.new("LIMIT_ROTATION")
             cns.name = cns_name
         cns.use_limit_y = True
@@ -1786,7 +1883,7 @@ def _make_rig(self, context):
         cns.owner_space = "LOCAL"
 
         # IK-FK switch property
-        if not "ik_fk_switch" in c_foot_ik_pb.keys():
+        if "ik_fk_switch" not in c_foot_ik_pb.keys():
             create_custom_prop(
                 node=c_foot_ik_pb,
                 prop_name="ik_fk_switch",
@@ -1801,7 +1898,7 @@ def _make_rig(self, context):
         # Thigh
         cns_name = "IK_follow"
         cns_ik = thigh_pb.constraints.get(cns_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = thigh_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
@@ -1810,7 +1907,7 @@ def _make_rig(self, context):
 
         cns_name = "FK_follow"
         cns_fk = thigh_pb.constraints.get(cns_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = thigh_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
@@ -1832,7 +1929,7 @@ def _make_rig(self, context):
         # Calf
         cns_name = "IK_follow"
         cns_ik = calf_pb.constraints.get(cns_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = calf_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
@@ -1841,7 +1938,7 @@ def _make_rig(self, context):
 
         cns_name = "FK_follow"
         cns_fk = calf_pb.constraints.get(cns_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = calf_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
@@ -1850,7 +1947,7 @@ def _make_rig(self, context):
 
         add_driver_to_prop(
             rig,
-            'pose.bones["' + leg_data['calf_name'] + '"].constraints["' + cns_name + '"].influence',
+            f'pose.bones["{leg_data["calf_name"]}"].constraints["{cns_name}"].influence',
             'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
@@ -1859,7 +1956,7 @@ def _make_rig(self, context):
         # Foot
         cns_name = "IK_follow"
         cns_ik = foot_pb.constraints.get(cns_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = foot_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
@@ -1868,7 +1965,7 @@ def _make_rig(self, context):
 
         cns_name = "FK_follow"
         cns_fk = foot_pb.constraints.get(cns_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = foot_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
@@ -1877,7 +1974,7 @@ def _make_rig(self, context):
 
         add_driver_to_prop(
             rig,
-            'pose.bones["' + leg_data['foot_name'] + '"].constraints["' + cns_name + '"].influence',
+            f'pose.bones["{leg_data["foot_name"]}"].constraints["{cns_name}"].influence',
             'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
@@ -1886,7 +1983,7 @@ def _make_rig(self, context):
         # Toe
         cns_name = "IK_Rot_follow"
         cns_ik_rot = toe_pb.constraints.get(cns_name)
-        if cns_ik_rot == None:
+        if cns_ik_rot is None:
             cns_ik_rot = toe_pb.constraints.new("COPY_ROTATION")
             cns_ik_rot.name = cns_name
         cns_ik_rot.target = rig
@@ -1895,7 +1992,7 @@ def _make_rig(self, context):
 
         cns_name = "IK_Scale_follow"
         cns_ik_scale = toe_pb.constraints.get(cns_name)
-        if cns_ik_scale == None:
+        if cns_ik_scale is None:
             cns_ik_scale = toe_pb.constraints.new("COPY_SCALE")
             cns_ik_scale.name = cns_name
         cns_ik_scale.target = rig
@@ -1904,7 +2001,7 @@ def _make_rig(self, context):
 
         cns_name_fk_rot = "FK_Rot_follow"
         cns_fk_rot = toe_pb.constraints.get(cns_name_fk_rot)
-        if cns_fk_rot == None:
+        if cns_fk_rot is None:
             cns_fk_rot = toe_pb.constraints.new("COPY_ROTATION")
             cns_fk_rot.name = cns_name_fk_rot
         cns_fk_rot.target = rig
@@ -1913,7 +2010,7 @@ def _make_rig(self, context):
 
         cns_name_fk_scale = "FK_Scale_follow"
         cns_fk_scale = toe_pb.constraints.get(cns_name_fk_scale)
-        if cns_fk_scale == None:
+        if cns_fk_scale is None:
             cns_fk_scale = toe_pb.constraints.new("COPY_SCALE")
             cns_fk_scale.name = cns_name_fk_scale
         cns_fk_scale.target = rig
@@ -2029,7 +2126,7 @@ def _make_rig(self, context):
     for side in ['left', 'right']:
         if not edit_data[f'arm_{side}'].get('exists'):
             continue
-            
+
         print(f"    Setting up Arm pose for {side}...")
         arm_data = edit_data[f'arm_{side}']
         _side = "_" + arm_data['side']
@@ -2050,7 +2147,7 @@ def _make_rig(self, context):
         # Arm FK Ctrl
         cns_name = "Copy Location"
         cns = c_arm_fk_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = c_arm_fk_pb.constraints.new("COPY_LOCATION")
             cns.name = cns_name
         cns.head_tail = 1.0
@@ -2060,7 +2157,7 @@ def _make_rig(self, context):
         # Forearm IK
         cns_name = "IK"
         ik_cns = forearm_ik_pb.constraints.get(cns_name)
-        if ik_cns == None:
+        if ik_cns is None:
             ik_cns = forearm_ik_pb.constraints.new("IK")
             ik_cns.name = cns_name
         ik_cns.target = rig
@@ -2080,7 +2177,7 @@ def _make_rig(self, context):
         # Pole IK Ctrl
         cns_name = "Child Of"
         cns = c_pole_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = c_pole_ik_pb.constraints.new("CHILD_OF")
             cns.name = cns_name
         cns.target = rig
@@ -2089,7 +2186,7 @@ def _make_rig(self, context):
         # Hand IK Ctrl
         cns_name = "Child Of"
         cns = c_hand_ik_pb.constraints.get(cns_name)
-        if cns == None:
+        if cns is None:
             cns = c_hand_ik_pb.constraints.new("CHILD_OF")
             cns.name = cns_name
         cns.target = rig
@@ -2105,7 +2202,7 @@ def _make_rig(self, context):
         add_copy_transf(shoulder_pb, rig, c_shoulder_pb.name)
 
         # IK-FK switch property
-        if not "ik_fk_switch" in c_hand_ik_pb.keys():
+        if "ik_fk_switch" not in c_hand_ik_pb.keys():
             create_custom_prop(
                 node=c_hand_ik_pb,
                 prop_name="ik_fk_switch",
@@ -2120,7 +2217,7 @@ def _make_rig(self, context):
         # Arm
         cns_ik_name = "IK_follow"
         cns_ik = arm_pb.constraints.get(cns_ik_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = arm_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
@@ -2129,7 +2226,7 @@ def _make_rig(self, context):
 
         cns_fk_name = "FK_Follow"
         cns_fk = arm_pb.constraints.get(cns_fk_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = arm_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
@@ -2151,7 +2248,7 @@ def _make_rig(self, context):
         # ForeArm
         cns_ik_name = "IK_follow"
         cns_ik = forearm_pb.constraints.get(cns_ik_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = forearm_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
@@ -2160,7 +2257,7 @@ def _make_rig(self, context):
 
         cns_fk_name = "FK_Follow"
         cns_fk = forearm_pb.constraints.get(cns_fk_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = forearm_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
@@ -2184,7 +2281,7 @@ def _make_rig(self, context):
         # Hand
         cns_ik_name = "IK_follow"
         cns_ik = hand_pb.constraints.get(cns_ik_name)
-        if cns_ik == None:
+        if cns_ik is None:
             cns_ik = hand_pb.constraints.new("COPY_ROTATION")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
@@ -2193,7 +2290,7 @@ def _make_rig(self, context):
 
         cns_fk_name = "FK_Follow"
         cns_fk = hand_pb.constraints.get(cns_fk_name)
-        if cns_fk == None:
+        if cns_fk is None:
             cns_fk = hand_pb.constraints.new("COPY_ROTATION")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
@@ -2219,8 +2316,8 @@ def _make_rig(self, context):
         set_bone_custom_shape(c_arm_fk_pb, "cs_arm_fk")
         set_bone_custom_shape(c_forearm_fk_pb, "cs_forearm_fk")
         set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
-        set_bone_custom_shape(c_hand_fk_pb, "cs_hand")
-        set_bone_custom_shape(c_hand_ik_pb, "cs_hand")
+        set_bone_custom_shape(c_hand_fk_pb, "cs_circle")
+        set_bone_custom_shape(c_hand_ik_pb, "cs_circle")
 
         c_fingers_pb = []
 
@@ -2255,7 +2352,11 @@ def _make_rig(self, context):
             for arr_id in arr_ids:
                 add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="1-var")
 
-        fk_controls_names = [arm_data['c_arm_fk_name'], arm_data['c_forearm_fk_name'], arm_data['c_hand_fk_name']]
+        fk_controls_names = [
+            arm_data['c_arm_fk_name'],
+            arm_data['c_forearm_fk_name'],
+            arm_data['c_hand_fk_name'],
+        ]
 
         for n in fk_controls_names:
             dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
@@ -2283,13 +2384,12 @@ def _make_rig(self, context):
 
     # tag the armature with a custom prop to specify the control rig is built
     rig.data["mr_control_rig"] = True
-    
+
     print("  Control rig build complete!")
 
 
 def _zero_out(context):
     print("\nZeroing out...")
-    scn = context.scene
     arm = context.object
 
     print("  Clear anim")
@@ -2298,16 +2398,20 @@ def _zero_out(context):
     stored_action = None
     if arm.animation_data:
         try:
-            stored_action = animation_compat.get_action_from_animdata(arm.animation_data)
+            stored_action = animation_compat.get_action_from_animdata(
+                arm.animation_data
+            )
             # Completely clear animation_data to avoid any dependency graph issues
             arm.animation_data_clear()
-            print(f"  Animation data cleared (action was: {stored_action.name if stored_action else 'None'})")
+            action_name = stored_action.name if stored_action else 'None'
+            print(f"  Animation data cleared (action was: {action_name})")
         except Exception as e:
             print(f"  Warning: Could not clear animation data: {e}")
             # Fallback: just unlink
             try:
                 arm.animation_data.action = None
-                if animation_compat.has_slotted_actions() and hasattr(arm.animation_data, 'action_slot'):
+                has_slots = animation_compat.has_slotted_actions()
+                if has_slots and hasattr(arm.animation_data, 'action_slot'):
                     arm.animation_data.action_slot = None
             except Exception:
                 pass
@@ -2362,7 +2466,11 @@ def _bake_anim(self, context):
         return
 
     # get active action frame range (compatible with both legacy and slotted actions)
-    act = animation_compat.get_action_from_animdata(rig.animation_data) if rig.animation_data else None
+    act = (
+        animation_compat.get_action_from_animdata(rig.animation_data)
+        if rig.animation_data
+        else None
+    )
     if act is not None:
         frame_range = animation_compat.get_action_frame_range(act)
         if frame_range[0] < fs:
@@ -2424,11 +2532,11 @@ def _bake_anim(self, context):
 def redefine_source_rest_pose(src_arm, tar_arm):
     """
     Redefine the source armature's rest pose to match the target's rest pose.
-    This modifies src_arm directly (like 3.6 version) to ensure proper helper bone creation.
+    This modifies src_arm directly (like 3.6 version)
+    to ensure proper helper bone creation.
     """
     print("  Redefining source rest pose...")
 
-    scn = bpy.context.scene
 
     # Get frame range using compatibility function
     src_action = animation_compat.get_action_from_animdata(src_arm.animation_data)
@@ -2439,7 +2547,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     # Save source location
     src_arm_loc = src_arm.location.copy()
     src_arm.location = [0, 0, 0]
-    
+
     # Duplicate source armature to preserve animation
     _safe_deselect_all()
     set_active_object(src_arm.name)
@@ -2469,7 +2577,10 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
         for pbone in src_arm.pose.bones:
             bones_matrices[pbone.name] = pbone.matrix.copy()
-            #bones_matrices[pbone.name] = src_arm.convert_space(pose_bone=pbone, matrix=pbone.matrix, from_space="POSE", to_space="LOCAL")
+            # bones_matrices[pbone.name] = src_arm.convert_space(
+            #     pose_bone=pbone, matrix=pbone.matrix,
+            #     from_space="POSE", to_space="LOCAL"
+            # )
 
 
         bones_data.append((f, bones_matrices))
@@ -2512,7 +2623,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     for bname in rest_bones:
         ebone = src_arm.data.edit_bones.get(bname)
 
-        if ebone == None:
+        if ebone is None:
             # print("Warning, bone not found on source armature:", bname)
             continue
 
@@ -2553,7 +2664,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
     # Restore location
     src_arm.location = src_arm_loc
-    
+
     # Delete temp constraints
     for pb in src_arm.pose.bones:
         if len(pb.constraints):
@@ -2563,7 +2674,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
     # Delete the duplicate
     delete_object(src_arm_dupli)
-    
+
     print("  Source armature rest pose redefined.")
 
 
@@ -2580,14 +2691,13 @@ def add_slight_bend(bone, axis, angle=0.01):
 
 def _import_anim(src_arm, tar_arm, import_only=False):
     print("\nImporting animation...")
-    scn = bpy.context.scene
 
-    if src_arm.animation_data == None:
+    if src_arm.animation_data is None:
         print("  No action found on the source armature")
         return
 
     src_action_check = animation_compat.get_action_from_animdata(src_arm.animation_data)
-    if src_action_check == None:
+    if src_action_check is None:
         print("  No action found on the source armature")
         return
 
@@ -2599,7 +2709,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     # CRITICAL FIX: Work on a duplicate, then reassign src_arm like 3.6 does
     _safe_deselect_all()
     set_active_object(src_arm.name)
-    
+
     # Detect if source armature uses mixamorig: prefix
     use_name_prefix = False
     detected_prefix = ""
@@ -2619,16 +2729,18 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     duplicate_object()
     src_arm_copy_name = src_arm.name + "_COPY"
     bpy.context.active_object.name = src_arm_copy_name
-    
+
     # CRITICAL: Reassign src_arm to the copy, like 3.6 line 2465
     src_arm = get_object(src_arm_copy_name)
     src_arm["mix_to_del"] = True
-    
-    # Store the detected prefix on the source armature data so get_mixamo_prefix() can find it
-    # This is critical because get_mixamo_prefix() reads from active_object, but we'll be
+
+    # Store the detected prefix on the source armature data
+    # so get_mixamo_prefix() can find it
+    # This is critical because get_mixamo_prefix() reads from active_object,
+    # but we'll be
     # working with the target armature active when creating constraints
     src_arm.data["mixamo_prefix"] = detected_prefix
-    
+
     # Helper function to construct source bone names with the correct prefix
     def get_src_bone_name(base_name):
         if use_name_prefix:
@@ -2647,7 +2759,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     else:
         print("  ERROR: No animation data after rest pose redefine")
         return
-        
+
     if action is None:
         print("  ERROR: No action found")
         return
@@ -2677,13 +2789,13 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     foot_left_name = get_src_bone_name("LeftFoot")
     foot_right_name = get_src_bone_name("RightFoot")
 
-    hand_left_pb = get_pose_bone(hand_left_name)
+    get_pose_bone(hand_left_name)
     c_hand_ik_left_pb = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + "_Left")
-    hand_right_pb = get_pose_bone(hand_right_name)
+    get_pose_bone(hand_right_name)
     c_hand_ik_right_pb = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + "_Right")
-    foot_left_pb = get_pose_bone(foot_left_name)
+    get_pose_bone(foot_left_name)
     c_foot_ik_left_pb = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + "_Left")
-    foot_right_pb = get_pose_bone(foot_right_name)
+    get_pose_bone(foot_right_name)
     c_foot_ik_right_pb = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + "_Right")
 
     arm_left_kinematic = "IK" if c_hand_ik_left_pb["ik_fk_switch"] < 0.5 else "FK"
@@ -2887,17 +2999,17 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     # Init source armature rotation and scale
     _safe_deselect_all()
     set_active_object(src_arm.name)
-    
+
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
     except Exception:
         pass
-    
+
     bpy.context.view_layer.update()
 
     scale_fac = src_arm.scale[0]
     print(f"  Source scale factor: {scale_fac}")
-    
+
     try:
         bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
         bpy.context.evaluated_depsgraph_get().update()
@@ -2917,7 +3029,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     _safe_deselect_all()
     set_active_object(src_arm.name)
     bpy.context.view_layer.update()
-    
+
     try:
         bpy.ops.object.mode_set(mode="EDIT")
     except Exception as e:
@@ -2992,29 +3104,29 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     # Retarget - Method 2: Constrained retargetting
     _safe_deselect_all()
     set_active_object(tar_arm.name)
-    
+
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.mode_set(mode="POSE")
     except Exception as e:
         print(f"  ERROR switching to POSE: {e}")
         return
-    
+
     bpy.ops.pose.select_all(action="DESELECT")
     bpy.context.view_layer.update()
 
-    print(f"  Adding retarget constraints...")
-    
+    print("  Adding retarget constraints...")
+
     # add constraints
     for src_name in bones_map:
         tar_name = bones_map[src_name]
         src_bone = src_arm.pose.bones.get(src_name)
         tar_bone = tar_arm.pose.bones.get(tar_name)
 
-        if src_bone == None:
+        if src_bone is None:
             print(f"    SKIP: Source bone not found: {src_name}")
             continue
-        if tar_bone == None:
+        if tar_bone is None:
             print(f"    SKIP: Target bone not found: {tar_name}")
             continue
 
@@ -3086,7 +3198,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         bpy.ops.object.mode_set(mode="OBJECT")
     except Exception:
         pass
-        
+
     print("Animation imported.")
 
     # Ensure target has proper action slot (4.4+)
@@ -3097,7 +3209,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             )
     except Exception:
         pass
-    
+
 
 def remove_retarget_cns(armature):
     # print("Removing constraints...")
@@ -3145,7 +3257,6 @@ class MR_PT_MenuMain(Panel, MixamoRigPanel):
     bl_label = "Mixamo Control Rig"
 
     def draw(self, context):
-        scn = context.scene
 
         layt = self.layout
         layt.use_property_split = True
@@ -3156,7 +3267,7 @@ class MR_PT_MenuMain(Panel, MixamoRigPanel):
         # col.prop_search(scn, "mix_source_armature", scn, "objects", text="Skeleton")
         arm_name = "None"
 
-        if context.active_object != None:
+        if context.active_object is not None:
             if context.active_object.type == "ARMATURE":
                 arm_name = context.active_object.name
 
@@ -3172,8 +3283,6 @@ class MR_PT_MenuRig(Panel, MixamoRigPanel):
         layt.use_property_split = True
         layt.use_property_decorate = False
 
-        obj = context.active_object
-        scn = context.scene
 
         """
         has_rigged = False
@@ -3213,7 +3322,9 @@ class MR_PT_MenuAnim(Panel, MixamoRigPanel):
 
         col = layt.column(align=True)
         col.scale_y = 1
-        # col.prop_search(scn, "mix_target_armature", scn, "objects", text="Control Rig")
+        # col.prop_search(
+        #     scn, "mix_target_armature", scn, "objects", text="Control Rig"
+        # )
         col.label(text="Source Skeleton:")
         col.prop_search(scn, "mix_source_armature", scn, "objects", text="")
         col.separator()

@@ -1,5 +1,6 @@
 import bpy
 
+
 def get_data_bone(name):
     return bpy.context.active_object.data.bones.get(name)
 

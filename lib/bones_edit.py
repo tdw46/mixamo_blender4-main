@@ -1,5 +1,6 @@
 import bpy
 
+
 def get_edit_bone(name):
     return bpy.context.object.data.edit_bones.get(name)
 
