@@ -2,11 +2,9 @@
 Convenience module for re-exporting commonly used functions and constants.
 This module uses star imports intentionally for backward compatibility.
 """
-import os
+
 from math import *  # noqa: F403
 
-import bpy
-from bpy.types import Panel, UIList
 from mathutils import *  # noqa: F403
 
 from .lib.addon import *  # noqa: F403

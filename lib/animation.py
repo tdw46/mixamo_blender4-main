@@ -7,7 +7,14 @@ from .maths_geo import get_ik_pole_pos
 from .version import blender_version
 
 
-def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True, bake_object=False, ik_data=None):
+def bake_anim(
+    frame_start=0,
+    frame_end=10,
+    only_selected=False,
+    bake_bones=True,
+    bake_object=False,
+    ik_data=None,
+):
     scn = bpy.context.scene
     obj_data = []
     bones_data = []
@@ -22,7 +29,9 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
             bmat = pbone.matrix
 
             # IK poles
-            if pbone.name.startswith("Ctrl_ArmPole") or pbone.name.startswith("Ctrl_LegPole"):
+            if pbone.name.startswith("Ctrl_ArmPole") or pbone.name.startswith(
+                "Ctrl_LegPole"
+            ):
                 b1 = b2 = None
                 src_arm = ik_data.get("src_arm")
                 if src_arm is None:
@@ -35,14 +44,14 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 elif "Arm" in pbone.name:
                     type = "Arm"
 
-                name_split = pbone.name.split('_')
+                name_split = pbone.name.split("_")
                 side = name_split[-1]
 
-                if type+side not in ik_data:
-                    print(f"Error: {type+side} not found in ik_data")
+                if type + side not in ik_data:
+                    print(f"Error: {type + side} not found in ik_data")
                     continue
 
-                b1_name, b2_name = ik_data[type+side]
+                b1_name, b2_name = ik_data[type + side]
                 b1 = src_arm.pose.bones.get(b1_name)
                 b2 = src_arm.pose.bones.get(b2_name)
 
@@ -54,7 +63,7 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 if b1 and b2:
                     _axis = None
                     if type == "Leg":
-                        _axis = (b1.z_axis*0.5) + (b2.z_axis*0.5)
+                        _axis = (b1.z_axis * 0.5) + (b2.z_axis * 0.5)
                     elif type == "Arm":
                         if side == "Left":
                             _axis = b2.x_axis
@@ -74,18 +83,28 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     if child_of_cns:
                         if child_of_cns.subtarget:
                             if child_of_cns.influence == 1.0 and not child_of_cns.mute:
-                                subtarget_bone = armature.pose.bones.get(child_of_cns.subtarget)
+                                subtarget_bone = armature.pose.bones.get(
+                                    child_of_cns.subtarget
+                                )
                                 if subtarget_bone:
-                                    bmat = subtarget_bone.matrix_channel.inverted() @ bmat
+                                    bmat = (
+                                        subtarget_bone.matrix_channel.inverted() @ bmat
+                                    )
                                 else:
-                                    print(f"Subtarget bone not found: {child_of_cns.subtarget}")
+                                    print(
+                                        f"Subtarget bone not found: {child_of_cns.subtarget}"
+                                    )
                     else:
                         print(f"No Child Of constraint found for {pbone.name}")
                 else:
-                    print(f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}")
+                    print(
+                        f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}"
+                    )
                     continue
 
-            matrix[pbone.name] = armature.convert_space(pose_bone=pbone, matrix=bmat, from_space="POSE", to_space="LOCAL")
+            matrix[pbone.name] = armature.convert_space(
+                pose_bone=pbone, matrix=bmat, from_space="POSE", to_space="LOCAL"
+            )
 
         return matrix
 
@@ -100,7 +119,7 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
     # store matrices
     current_frame = scn.frame_current
 
-    for f in range(int(frame_start), int(frame_end+1)):
+    for f in range(int(frame_start), int(frame_end + 1)):
         scn.frame_set(f)
         bpy.context.view_layer.update()
 
@@ -121,7 +140,6 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
             keyframes[fc_key] = []
         keyframes[fc_key].extend((fra, val))
 
-
     # set transforms and store keyframes
     if bake_bones:
         for pb in armature.pose.bones:
@@ -132,7 +150,7 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
             quat_prev = None
             keyframes = {}
 
-            for (f, matrix) in bones_data:
+            for f, matrix in bones_data:
                 pb.matrix_basis = matrix[pb.name].copy()
 
                 for arr_idx, value in enumerate(pb.location):
@@ -140,7 +158,7 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
 
                 rotation_mode = pb.rotation_mode
 
-                if rotation_mode == 'QUATERNION':
+                if rotation_mode == "QUATERNION":
                     if quat_prev is not None:
                         quat = pb.rotation_quaternion.copy()
                         quat.make_compatible(quat_prev)
@@ -151,11 +169,15 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                         quat_prev = pb.rotation_quaternion.copy()
 
                     for arr_idx, value in enumerate(pb.rotation_quaternion):
-                        store_keyframe(pb.name, "rotation_quaternion", arr_idx, f, value)
+                        store_keyframe(
+                            pb.name, "rotation_quaternion", arr_idx, f, value
+                        )
 
-                elif rotation_mode == 'AXIS_ANGLE':
+                elif rotation_mode == "AXIS_ANGLE":
                     for arr_idx, value in enumerate(pb.rotation_axis_angle):
-                        store_keyframe(pb.name, "rotation_axis_angle", arr_idx, f, value)
+                        store_keyframe(
+                            pb.name, "rotation_axis_angle", arr_idx, f, value
+                        )
 
                 else:  # euler, XYZ, ZXY etc
                     if euler_prev is not None:
@@ -173,11 +195,12 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                 for arr_idx, value in enumerate(pb.scale):
                     store_keyframe(pb.name, "scale", arr_idx, f, value)
 
-
             # Add keyframes (use ensure API so 4.4+ creates slot/layer/strip)
             for fc_key, key_values in keyframes.items():
                 data_path, index = fc_key
-                fcurve = animation_compat.ensure_fcurve_exists(action, armature, data_path, index=index)
+                fcurve = animation_compat.ensure_fcurve_exists(
+                    action, armature, data_path, index=index
+                )
                 # ensure the fcurve is grouped under the bone name (harmless if already set)
                 try:
                     if fcurve.group is None or fcurve.group.name != pb.name:
@@ -188,28 +211,35 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
 
                 num_keys = len(key_values) // 2
                 fcurve.keyframe_points.add(num_keys)
-                fcurve.keyframe_points.foreach_set('co', key_values)
+                fcurve.keyframe_points.foreach_set("co", key_values)
 
-                if blender_version._float >= 290:# internal error when doing so with Blender 2.83, only for Blender 2.90 and higher
-                    linear_enum_value = bpy.types.Keyframe.bl_rna.properties['interpolation'].enum_items['LINEAR'].value
-                    fcurve.keyframe_points.foreach_set('interpolation', (linear_enum_value,) * num_keys)
+                if (
+                    blender_version._float >= 290
+                ):  # internal error when doing so with Blender 2.83, only for Blender 2.90 and higher
+                    linear_enum_value = (
+                        bpy.types.Keyframe.bl_rna.properties["interpolation"]
+                        .enum_items["LINEAR"]
+                        .value
+                    )
+                    fcurve.keyframe_points.foreach_set(
+                        "interpolation", (linear_enum_value,) * num_keys
+                    )
                 else:
                     for kf in fcurve.keyframe_points:
-                        kf.interpolation = 'LINEAR'
-
+                        kf.interpolation = "LINEAR"
 
     if bake_object:
         euler_prev = None
         quat_prev = None
 
-        for (f, matrix) in obj_data:
+        for f, matrix in obj_data:
             name = "Action Bake"
             armature.matrix_basis = matrix
 
             armature.keyframe_insert("location", index=-1, frame=f, group=name)
 
             rotation_mode = armature.rotation_mode
-            if rotation_mode == 'QUATERNION':
+            if rotation_mode == "QUATERNION":
                 if quat_prev is not None:
                     quat = armature.rotation_quaternion.copy()
                     quat.make_compatible(quat_prev)
@@ -218,9 +248,13 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     del quat
                 else:
                     quat_prev = armature.rotation_quaternion.copy()
-                armature.keyframe_insert("rotation_quaternion", index=-1, frame=f, group=name)
-            elif rotation_mode == 'AXIS_ANGLE':
-                armature.keyframe_insert("rotation_axis_angle", index=-1, frame=f, group=name)
+                armature.keyframe_insert(
+                    "rotation_quaternion", index=-1, frame=f, group=name
+                )
+            elif rotation_mode == "AXIS_ANGLE":
+                armature.keyframe_insert(
+                    "rotation_axis_angle", index=-1, frame=f, group=name
+                )
             else:  # euler, XYZ, ZXY etc
                 if euler_prev is not None:
                     euler = armature.rotation_euler.copy()
@@ -230,10 +264,11 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
                     del euler
                 else:
                     euler_prev = armature.rotation_euler.copy()
-                armature.keyframe_insert("rotation_euler", index=-1, frame=f, group=name)
+                armature.keyframe_insert(
+                    "rotation_euler", index=-1, frame=f, group=name
+                )
 
             armature.keyframe_insert("scale", index=-1, frame=f, group=name)
-
 
     # restore current frame
     scn.frame_set(current_frame)
@@ -242,8 +277,8 @@ def bake_anim(frame_start=0, frame_end=10, only_selected=False, bake_bones=True,
     try:
         if has_slotted_actions() and armature.animation_data:
             anim_data = armature.animation_data
-            if hasattr(anim_data, 'action_slot') and anim_data.action_slot is None:
-                suitable = getattr(anim_data, 'action_suitable_slots', None)
+            if hasattr(anim_data, "action_slot") and anim_data.action_slot is None:
+                suitable = getattr(anim_data, "action_suitable_slots", None)
                 if suitable and len(suitable) > 0:
                     anim_data.action_slot = suitable[0]
     except Exception:

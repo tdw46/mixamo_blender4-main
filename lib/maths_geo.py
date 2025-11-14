@@ -16,7 +16,9 @@ def vec_roll_to_mat3(vec, roll):
     target = Vector((0, 0.1, 0))
     nor = vec.normalized()
     axis = target.cross(nor)
-    if axis.dot(axis) > 0.0000000001: # this seems to be the problem for some bones, no idea how to fix
+    if (
+        axis.dot(axis) > 0.0000000001
+    ):  # this seems to be the problem for some bones, no idea how to fix
         axis.normalize()
         theta = target.angle(nor)
         bMatrix = Matrix.Rotation(theta, 3, axis)
@@ -80,7 +82,9 @@ def project_point_onto_plane(q, p, n):
 def get_pole_angle(base_bone, ik_bone, pole_location):
     pole_normal = (ik_bone.tail - base_bone.head).cross(pole_location - base_bone.head)
     projected_pole_axis = pole_normal.cross(base_bone.tail - base_bone.head)
-    return signed_angle(base_bone.x_axis, projected_pole_axis, base_bone.tail - base_bone.head)
+    return signed_angle(
+        base_bone.x_axis, projected_pole_axis, base_bone.tail - base_bone.head
+    )
 
 
 def get_pose_matrix_in_other_space(mat, pose_bone):
@@ -103,19 +107,20 @@ def get_pose_matrix_in_other_space(mat, pose_bone):
 
 
 def get_ik_pole_pos(b1, b2, method=1, axis=None):
-
     if method == 1:
         # IK pole position based on real IK bones vector
-        plane_normal = (b1.head - b2.tail)
+        plane_normal = b1.head - b2.tail
         midpoint = (b1.head + b2.tail) * 0.5
-        prepole_dir = b2.head - midpoint#prepole_fk.tail - prepole_fk.head
-        pole_pos = b2.head + prepole_dir.normalized()# * 4
+        prepole_dir = b2.head - midpoint  # prepole_fk.tail - prepole_fk.head
+        pole_pos = b2.head + prepole_dir.normalized()  # * 4
         pole_pos = project_point_onto_plane(pole_pos, b2.head, plane_normal)
-        pole_pos = b2.head + ((pole_pos - b2.head).normalized() * (b2.head - b1.head).magnitude * 1.7)
+        pole_pos = b2.head + (
+            (pole_pos - b2.head).normalized() * (b2.head - b1.head).magnitude * 1.7
+        )
 
     elif method == 2:
         # IK pole position based on bone2 Z axis vector
-        pole_pos = b2.head + (axis.normalized() * (b2.tail-b2.head).magnitude)
+        pole_pos = b2.head + (axis.normalized() * (b2.tail - b2.head).magnitude)
 
     return pole_pos
 
@@ -128,7 +133,7 @@ def rotate_point(point, angle, origin, axis):
     # rotate
     rotated_point = rot_mat @ offset_knee
     # bring back to original space
-    rotated_point = rotated_point -offset_vec
+    rotated_point = rotated_point - offset_vec
     return rotated_point
 
 

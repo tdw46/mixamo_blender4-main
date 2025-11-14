@@ -9,7 +9,7 @@ def set_bone_collection(armt, databone, coll_name, multi=False):
     if databone is None:
         return
 
-    armt_data = armt.data if hasattr(armt, 'data') else armt
+    armt_data = armt.data if hasattr(armt, "data") else armt
 
     coll = armt_data.collections.get(coll_name)
     if coll is None:
@@ -31,5 +31,5 @@ def set_bone_collection(armt, databone, coll_name, multi=False):
     # ~ databone.layers[layer_idx] = True
 
     # ~ for i, lay in enumerate(databone.layers):
-        # ~ if i != layer_idx:
-            # ~ databone.layers[i] = False
+    # ~ if i != layer_idx:
+    # ~ databone.layers[i] = False

@@ -1,10 +1,5 @@
-import os
-from math import degrees, radians
-from operator import itemgetter
-
 import bpy
-from bpy.app.handlers import persistent
-from mathutils import Matrix, Vector
+from mathutils import Matrix
 
 # Import from definitions
 from .definitions.naming import (
@@ -12,70 +7,72 @@ from .definitions.naming import (
     c_prefix,
     leg_rig_names,
 )
-from .lib.animation import bake_anim
 
 # Import from lib modules
 from .lib.bones_pose import get_pose_bone, get_selected_pbone_name, update_transform
 from .lib.maths_geo import (
     get_ik_pole_pos,
-    get_pole_angle,
     get_pose_matrix_in_other_space,
 )
 from .lib.mixamo import get_bone_side, get_mixamo_prefix
 
 fk_leg = [
-    c_prefix+leg_rig_names["thigh_fk"],
-    c_prefix+leg_rig_names["calf_fk"],
-    c_prefix+leg_rig_names["foot_fk"],
-    c_prefix+leg_rig_names["toes_fk"],
+    c_prefix + leg_rig_names["thigh_fk"],
+    c_prefix + leg_rig_names["calf_fk"],
+    c_prefix + leg_rig_names["foot_fk"],
+    c_prefix + leg_rig_names["toes_fk"],
 ]
 ik_leg = [
     leg_rig_names["thigh_ik"],
     leg_rig_names["calf_ik"],
-    c_prefix+leg_rig_names["foot_ik"],
-    c_prefix+leg_rig_names["pole_ik"],
-    c_prefix+leg_rig_names["toes_ik"],
-    c_prefix+leg_rig_names["foot_01"],
-    c_prefix+leg_rig_names["foot_roll_cursor"],
+    c_prefix + leg_rig_names["foot_ik"],
+    c_prefix + leg_rig_names["pole_ik"],
+    c_prefix + leg_rig_names["toes_ik"],
+    c_prefix + leg_rig_names["foot_01"],
+    c_prefix + leg_rig_names["foot_roll_cursor"],
     leg_rig_names["foot_snap"],
 ]
 fk_arm = [
-    c_prefix+arm_rig_names["arm_fk"],
-    c_prefix+arm_rig_names["forearm_fk"],
-    c_prefix+arm_rig_names["hand_fk"],
+    c_prefix + arm_rig_names["arm_fk"],
+    c_prefix + arm_rig_names["forearm_fk"],
+    c_prefix + arm_rig_names["hand_fk"],
 ]
 ik_arm = [
     arm_rig_names["arm_ik"],
     arm_rig_names["forearm_ik"],
-    c_prefix+arm_rig_names["hand_ik"],
-    c_prefix+arm_rig_names["pole_ik"],
+    c_prefix + arm_rig_names["hand_ik"],
+    c_prefix + arm_rig_names["pole_ik"],
 ]
 
 ################## OPERATOR CLASSES ###################
+
 
 class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
     """Snaps and bake an FK to an IK arm over a specified frame range"""
 
     bl_idname = "pose.mr_bake_arm_fk_to_ik"
     bl_label = "Snap an FK to IK arm over a specified frame range"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
-    frame_start : bpy.props.IntProperty(name="Frame start", default=0)
-    frame_end : bpy.props.IntProperty(name="Frame end", default=10)
+    side: bpy.props.StringProperty(name="bone side")
+    frame_start: bpy.props.IntProperty(name="Frame start", default=0)
+    frame_end: bpy.props.IntProperty(name="Frame end", default=10)
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, 'frame_start', text='Frame Start')
-        layout.prop(self, 'frame_end', text='Frame End')
+        layout.prop(self, "frame_start", text="Frame Start")
+        layout.prop(self, "frame_end", text="Frame End")
 
     def invoke(self, context, event):
         action = context.active_object.animation_data.action
-        self.frame_start, self.frame_end = int(action.frame_range[0]), int(action.frame_range[1])
+        self.frame_start, self.frame_end = (
+            int(action.frame_range[0]),
+            int(action.frame_range[1]),
+        )
         wm = context.window_manager
         return wm.invoke_props_dialog(self, width=400)
 
@@ -96,7 +93,7 @@ class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
             # restore autokey state
             context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_arm_fk_to_ik(bpy.types.Operator):
@@ -104,13 +101,13 @@ class MR_OT_arm_fk_to_ik(bpy.types.Operator):
 
     bl_idname = "pose.mr_arm_fk_to_ik_"
     bl_label = "Snap FK arm to IK"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
+    side: bpy.props.StringProperty(name="bone side")
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -125,7 +122,7 @@ class MR_OT_arm_fk_to_ik(bpy.types.Operator):
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
@@ -133,20 +130,20 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
 
     bl_idname = "pose.mr_bake_arm_ik_to_fk"
     bl_label = "Snap an IK to FK arm over a specified frame range"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
-    frame_start : bpy.props.IntProperty(name="Frame start", default=0)
-    frame_end : bpy.props.IntProperty(name="Frame end", default=10)
+    side: bpy.props.StringProperty(name="bone side")
+    frame_start: bpy.props.IntProperty(name="Frame start", default=0)
+    frame_end: bpy.props.IntProperty(name="Frame end", default=10)
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, 'frame_start', text='Frame Start')
-        layout.prop(self, 'frame_end', text='Frame End')
+        layout.prop(self, "frame_start", text="Frame Start")
+        layout.prop(self, "frame_end", text="Frame End")
 
     def invoke(self, context, event):
         wm = context.window_manager
@@ -170,7 +167,7 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
             # restore autokey state
             context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_arm_ik_to_fk(bpy.types.Operator):
@@ -178,13 +175,13 @@ class MR_OT_arm_ik_to_fk(bpy.types.Operator):
 
     bl_idname = "pose.mr_arm_ik_to_fk_"
     bl_label = "Snap IK arm to FK"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
+    side: bpy.props.StringProperty(name="bone side")
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -198,7 +195,7 @@ class MR_OT_arm_ik_to_fk(bpy.types.Operator):
 
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_switch_snap_anim(bpy.types.Operator):
@@ -206,32 +203,29 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
 
     bl_idname = "pose.mr_switch_snap_anim"
     bl_label = "Switch and Snap IK FK anim"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
     rig = None
-    side : bpy.props.StringProperty(name="bone side", default="")
+    side: bpy.props.StringProperty(name="bone side", default="")
     _side = ""
     prefix: bpy.props.StringProperty(name="", default="")
-    type : bpy.props.StringProperty(name="type", default="")
+    type: bpy.props.StringProperty(name="type", default="")
 
-    frame_start : bpy.props.IntProperty(name="Frame start", default=0)
-    frame_end : bpy.props.IntProperty(name="Frame end", default=10)
+    frame_start: bpy.props.IntProperty(name="Frame start", default=0)
+    frame_end: bpy.props.IntProperty(name="Frame end", default=10)
     has_action = False
-
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
-
+        return context.active_object != None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
         if self.has_action:
-            layout.prop(self, 'frame_start', text='Frame Start')
-            layout.prop(self, 'frame_end', text='Frame End')
+            layout.prop(self, "frame_start", text="Frame Start")
+            layout.prop(self, "frame_end", text="Frame End")
         else:
             layout.label(text="This rig is not animated!")
-
 
     def invoke(self, context, event):
         try:
@@ -242,15 +236,17 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
             pass
 
         if self.has_action:
-            self.frame_start, self.frame_end = int(action.frame_range[0]), int(action.frame_range[1])
+            self.frame_start, self.frame_end = (
+                int(action.frame_range[0]),
+                int(action.frame_range[1]),
+            )
 
         wm = context.window_manager
         return wm.invoke_props_dialog(self, width=400)
 
-
     def execute(self, context):
         if self.has_action == False:
-            return {'FINISHED'}
+            return {"FINISHED"}
 
         try:
             scn = context.scene
@@ -264,9 +260,8 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
-
 
             if is_selected(fk_leg, bname) or is_selected(ik_leg, bname):
                 self.type = "LEG"
@@ -274,20 +269,23 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
                 self.type = "ARM"
 
             if self.type == "ARM":
-                c_hand_ik = get_pose_bone(c_prefix+arm_rig_names["hand_ik"]+self._side)#self.prefix+self.side+'Hand')
-                if c_hand_ik['ik_fk_switch'] < 0.5:
+                c_hand_ik = get_pose_bone(
+                    c_prefix + arm_rig_names["hand_ik"] + self._side
+                )  # self.prefix+self.side+'Hand')
+                if c_hand_ik["ik_fk_switch"] < 0.5:
                     bake_fk_to_ik_arm(self)
                 else:
                     bake_ik_to_fk_arm(self)
 
             elif self.type == "LEG":
-                c_foot_ik = get_pose_bone(c_prefix+leg_rig_names["foot_ik"]+self._side)#get_pose_bone(self.prefix+self.side+'Foot')
-                if c_foot_ik['ik_fk_switch'] < 0.5:
+                c_foot_ik = get_pose_bone(
+                    c_prefix + leg_rig_names["foot_ik"] + self._side
+                )  # get_pose_bone(self.prefix+self.side+'Foot')
+                if c_foot_ik["ik_fk_switch"] < 0.5:
                     bake_fk_to_ik_leg(self)
                 else:
                     print("Bake IK to FK leg")
                     bake_ik_to_fk_leg(self)
-
 
         finally:
             # restore autokey state
@@ -295,7 +293,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
             # restore frame
             scn.frame_set(cur_frame)
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_switch_snap(bpy.types.Operator):
@@ -303,17 +301,17 @@ class MR_OT_switch_snap(bpy.types.Operator):
 
     bl_idname = "pose.mr_switch_snap"
     bl_label = "Switch and Snap IK FK"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
     rig = None
-    side : bpy.props.StringProperty(name="bone side", default="")
+    side: bpy.props.StringProperty(name="bone side", default="")
     _side = ""
     prefix: bpy.props.StringProperty(name="", default="")
-    type : bpy.props.StringProperty(name="type", default="")
+    type: bpy.props.StringProperty(name="type", default="")
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -323,7 +321,7 @@ class MR_OT_switch_snap(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
 
             if is_selected(fk_leg, bname) or is_selected(ik_leg, bname):
@@ -331,28 +329,30 @@ class MR_OT_switch_snap(bpy.types.Operator):
             elif is_selected(fk_arm, bname) or is_selected(ik_arm, bname):
                 self.type = "ARM"
 
-
             if self.type == "ARM":
-                #base_hand = get_pose_bone(self.prefix+self.side+'Hand')
-                c_hand_ik = get_pose_bone(c_prefix+arm_rig_names["hand_ik"]+self._side)#self.prefix+self.side+'Hand')
-                if c_hand_ik['ik_fk_switch'] < 0.5:
+                # base_hand = get_pose_bone(self.prefix+self.side+'Hand')
+                c_hand_ik = get_pose_bone(
+                    c_prefix + arm_rig_names["hand_ik"] + self._side
+                )  # self.prefix+self.side+'Hand')
+                if c_hand_ik["ik_fk_switch"] < 0.5:
                     fk_to_ik_arm(self)
                 else:
                     ik_to_fk_arm(self)
 
             elif self.type == "LEG":
-                #base_foot = get_pose_bone(self.prefix+self.side+'Foot')
-                c_foot_ik = get_pose_bone(c_prefix+leg_rig_names["foot_ik"]+self._side)#get_pose_bone(self.prefix+self.side+'Foot')
-                if c_foot_ik['ik_fk_switch'] < 0.5:
+                # base_foot = get_pose_bone(self.prefix+self.side+'Foot')
+                c_foot_ik = get_pose_bone(
+                    c_prefix + leg_rig_names["foot_ik"] + self._side
+                )  # get_pose_bone(self.prefix+self.side+'Foot')
+                if c_foot_ik["ik_fk_switch"] < 0.5:
                     fk_to_ik_leg(self)
                 else:
                     ik_to_fk_leg(self)
 
-
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
@@ -360,23 +360,23 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
 
     bl_idname = "pose.mr_bake_leg_fk_to_ik"
     bl_label = "Snap an FK to IK leg over a specified frame range"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
+    side: bpy.props.StringProperty(name="bone side")
     _side = ""
     prefix = ""
-    frame_start : bpy.props.IntProperty(name="Frame start", default=0)
-    frame_end : bpy.props.IntProperty(name="Frame end", default=10)
+    frame_start: bpy.props.IntProperty(name="Frame start", default=0)
+    frame_end: bpy.props.IntProperty(name="Frame end", default=10)
     rig = None
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, 'frame_start', text='Frame Start')
-        layout.prop(self, 'frame_end', text='Frame End')
+        layout.prop(self, "frame_start", text="Frame Start")
+        layout.prop(self, "frame_end", text="Frame End")
 
     def invoke(self, context, event):
         wm = context.window_manager
@@ -394,7 +394,7 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
 
             bake_fk_to_ik_leg(self)
@@ -403,7 +403,7 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
             # restore autokey state
             context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_leg_fk_to_ik(bpy.types.Operator):
@@ -411,16 +411,16 @@ class MR_OT_leg_fk_to_ik(bpy.types.Operator):
 
     bl_idname = "pose.mr_leg_fk_to_ik_"
     bl_label = "Snap FK leg to IK"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
+    side: bpy.props.StringProperty(name="bone side")
     rig = None
     _side = ""
     prefix = ""
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -430,14 +430,14 @@ class MR_OT_leg_fk_to_ik(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
 
             fk_to_ik_leg(self)
 
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
@@ -445,24 +445,23 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
 
     bl_idname = "pose.mr_bake_leg_ik_to_fk"
     bl_label = "Snap an IK to FK leg over a specified frame range"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
-    frame_start : bpy.props.IntProperty(name="Frame start", default=0)
-    frame_end : bpy.props.IntProperty(name="Frame end", default=10)
+    side: bpy.props.StringProperty(name="bone side")
+    frame_start: bpy.props.IntProperty(name="Frame start", default=0)
+    frame_end: bpy.props.IntProperty(name="Frame end", default=10)
     rig = None
     _side = ""
     prefix = ""
 
-
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, 'frame_start', text='Frame Start')
-        layout.prop(self, 'frame_end', text='Frame End')
+        layout.prop(self, "frame_start", text="Frame Start")
+        layout.prop(self, "frame_end", text="Frame End")
 
     def invoke(self, context, event):
         wm = context.window_manager
@@ -480,7 +479,7 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
 
             bake_ik_to_fk_leg(self)
@@ -490,7 +489,7 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
             # restore autokey state
             context.scene.tool_settings.use_keyframe_insert_auto = auto_key_state
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class MR_OT_leg_ik_to_fk(bpy.types.Operator):
@@ -498,16 +497,16 @@ class MR_OT_leg_ik_to_fk(bpy.types.Operator):
 
     bl_idname = "pose.mr_leg_ik_to_fk_"
     bl_label = "Snap IK leg to FK"
-    bl_options = {'UNDO'}
+    bl_options = {"UNDO"}
 
-    side : bpy.props.StringProperty(name="bone side")
+    side: bpy.props.StringProperty(name="bone side")
     rig = None
     _side = ""
     prefix = ""
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object != None and context.mode == 'POSE')
+        return context.active_object != None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -516,25 +515,25 @@ class MR_OT_leg_ik_to_fk(bpy.types.Operator):
             self.rig = context.active_object
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
-            self._side = '_'+self.side
+            self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
 
             ik_to_fk_leg(self)
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
 
-        return {'FINISHED'}
-
+        return {"FINISHED"}
 
 
 ################## FUNCTIONS ##################
 
+
 def set_pose_rotation(pose_bone, mat):
     q = mat.to_quaternion()
 
-    if pose_bone.rotation_mode == 'QUATERNION':
+    if pose_bone.rotation_mode == "QUATERNION":
         pose_bone.rotation_quaternion = q
-    elif pose_bone.rotation_mode == 'AXIS_ANGLE':
+    elif pose_bone.rotation_mode == "AXIS_ANGLE":
         pose_bone.rotation_axis_angle[0] = q.angle
         pose_bone.rotation_axis_angle[1] = q.axis[0]
         pose_bone.rotation_axis_angle[2] = q.axis[1]
@@ -557,16 +556,31 @@ def snap_pos(pose_bone, target_bone):
         # is there a child of constraint attached?
         child_of_cns = None
         if len(pose_bone.constraints) > 0:
-            all_child_of_cns = [i for i in pose_bone.constraints if i.type == "CHILD_OF" and i.influence == 1.0 and i.mute == False and i.target]
+            all_child_of_cns = [
+                i
+                for i in pose_bone.constraints
+                if i.type == "CHILD_OF"
+                and i.influence == 1.0
+                and i.mute == False
+                and i.target
+            ]
             if len(all_child_of_cns) > 0:
-                child_of_cns = all_child_of_cns[0]# in case of multiple child of constraints enabled, use only the first for now
+                child_of_cns = all_child_of_cns[
+                    0
+                ]  # in case of multiple child of constraints enabled, use only the first for now
 
         if child_of_cns != None:
             if child_of_cns.subtarget != "" and get_pose_bone(child_of_cns.subtarget):
                 # apply double time because of dependecy lag
-                pose_bone.matrix = get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted() @ target_bone.matrix
+                pose_bone.matrix = (
+                    get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted()
+                    @ target_bone.matrix
+                )
                 update_transform()
-                pose_bone.matrix = get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted() @ target_bone.matrix
+                pose_bone.matrix = (
+                    get_pose_bone(child_of_cns.subtarget).matrix_channel.inverted()
+                    @ target_bone.matrix
+                )
             else:
                 pose_bone.matrix = target_bone.matrix
 
@@ -585,9 +599,18 @@ def snap_pos_matrix(pose_bone, target_bone_matrix):
         # is there a child of constraint attached?
         child_of_cns = None
         if len(pose_bone.constraints) > 0:
-            all_child_of_cns = [i for i in pose_bone.constraints if i.type == "CHILD_OF" and i.influence == 1.0 and i.mute == False and i.target]
+            all_child_of_cns = [
+                i
+                for i in pose_bone.constraints
+                if i.type == "CHILD_OF"
+                and i.influence == 1.0
+                and i.mute == False
+                and i.target
+            ]
             if len(all_child_of_cns) > 0:
-                child_of_cns = all_child_of_cns[0]# in case of multiple child of constraints enabled, use only the first for now
+                child_of_cns = all_child_of_cns[
+                    0
+                ]  # in case of multiple child of constraints enabled, use only the first for now
 
         if child_of_cns != None:
             if child_of_cns.subtarget != "" and get_pose_bone(child_of_cns.subtarget):
@@ -609,8 +632,8 @@ def snap_rot(pose_bone, target_bone):
     if method == 1:
         mat = get_pose_matrix_in_other_space(target_bone.matrix, pose_bone)
         set_pose_rotation(pose_bone, mat)
-        #bpy.ops.object.mode_set(mode='OBJECT')
-        #bpy.ops.object.mode_set(mode='POSE')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        # bpy.ops.object.mode_set(mode='POSE')
         bpy.context.view_layer.update()
     elif method == 2:
         loc, scale = pose_bone.location.copy(), pose_bone.scale.copy()
@@ -620,7 +643,7 @@ def snap_rot(pose_bone, target_bone):
 
 
 def bake_fk_to_ik_arm(self):
-    for f in range(self.frame_start, self.frame_end +1):
+    for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
         print("baking frame", f)
         fk_to_ik_arm(self)
@@ -632,45 +655,45 @@ def fk_to_ik_arm(self):
     _side = self._side
     prefix = self.prefix
 
-    arm_fk  = rig.pose.bones[fk_arm[0] + _side]
-    forearm_fk  = rig.pose.bones[fk_arm[1] + _side]
-    hand_fk  = rig.pose.bones[fk_arm[2] + _side]
+    arm_fk = rig.pose.bones[fk_arm[0] + _side]
+    forearm_fk = rig.pose.bones[fk_arm[1] + _side]
+    hand_fk = rig.pose.bones[fk_arm[2] + _side]
 
     arm_ik = rig.pose.bones[ik_arm[0] + _side]
     forearm_ik = rig.pose.bones[ik_arm[1] + _side]
     hand_ik = rig.pose.bones[ik_arm[2] + _side]
     pole = rig.pose.bones[ik_arm[3] + _side]
 
-    #Snap rot
+    # Snap rot
     snap_rot(arm_fk, arm_ik)
     snap_rot(forearm_fk, forearm_ik)
     snap_rot(hand_fk, hand_ik)
 
-    #Snap scale
-    hand_fk.scale =hand_ik.scale
+    # Snap scale
+    hand_fk.scale = hand_ik.scale
 
-    #rot debug
-    forearm_fk.rotation_euler[0]=0
-    forearm_fk.rotation_euler[1]=0
+    # rot debug
+    forearm_fk.rotation_euler[0] = 0
+    forearm_fk.rotation_euler[1] = 0
 
-    #switch
-    #base_hand = get_pose_bone(prefix+side+'Hand')
-    c_hand_ik = get_pose_bone(c_prefix+arm_rig_names["hand_ik"]+_side)
-    c_hand_ik['ik_fk_switch'] = 1.0
+    # switch
+    # base_hand = get_pose_bone(prefix+side+'Hand')
+    c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
+    c_hand_ik["ik_fk_switch"] = 1.0
 
-    #udpate view
+    # udpate view
     bpy.context.view_layer.update()
 
-    #insert key if autokey enable
+    # insert key if autokey enable
     if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        #fk chain
+        # fk chain
         c_hand_ik.keyframe_insert(data_path='["ik_fk_switch"]')
         hand_fk.keyframe_insert(data_path="scale")
         hand_fk.keyframe_insert(data_path="rotation_euler")
         arm_fk.keyframe_insert(data_path="rotation_euler")
         forearm_fk.keyframe_insert(data_path="rotation_euler")
 
-        #ik chain
+        # ik chain
         hand_ik.keyframe_insert(data_path="location")
         hand_ik.keyframe_insert(data_path="rotation_euler")
         hand_ik.keyframe_insert(data_path="scale")
@@ -683,7 +706,7 @@ def fk_to_ik_arm(self):
 
 
 def bake_ik_to_fk_arm(self):
-    for f in range(self.frame_start, self.frame_end +1):
+    for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
         print("baking frame", f)
 
@@ -696,17 +719,17 @@ def ik_to_fk_arm(self):
     _side = self._side
     prefix = self.prefix
 
-    arm_fk  = rig.pose.bones[fk_arm[0] + _side]
-    forearm_fk  = rig.pose.bones[fk_arm[1] + _side]
-    hand_fk  = rig.pose.bones[fk_arm[2] + _side]
+    arm_fk = rig.pose.bones[fk_arm[0] + _side]
+    forearm_fk = rig.pose.bones[fk_arm[1] + _side]
+    hand_fk = rig.pose.bones[fk_arm[2] + _side]
 
     arm_ik = rig.pose.bones[ik_arm[0] + _side]
     forearm_ik = rig.pose.bones[ik_arm[1] + _side]
     hand_ik = rig.pose.bones[ik_arm[2] + _side]
-    pole_ik  = rig.pose.bones[ik_arm[3] + _side]
+    pole_ik = rig.pose.bones[ik_arm[3] + _side]
 
     # Snap
-        # constraint support
+    # constraint support
     constraint = None
     bparent_name = ""
     parent_type = ""
@@ -715,19 +738,18 @@ def ik_to_fk_arm(self):
     # Snap Hand
     if len(hand_ik.constraints) > 0:
         for c in hand_ik.constraints:
-            if not c.mute and c.influence > 0.5 and c.type == 'CHILD_OF':
+            if not c.mute and c.influence > 0.5 and c.type == "CHILD_OF":
                 if c.target:
-                    #if bone
-                    if c.target.type == 'ARMATURE':
+                    # if bone
+                    if c.target.type == "ARMATURE":
                         bparent_name = c.subtarget
                         parent_type = "bone"
                         constraint = c
-                    #if object
+                    # if object
                     else:
                         bparent_name = c.target.name
                         parent_type = "object"
                         constraint = c
-
 
     if constraint != None:
         if parent_type == "bone":
@@ -754,23 +776,23 @@ def ik_to_fk_arm(self):
     snap_pos_matrix(pole_ik, pole_mat)
 
     # Switch
-    c_hand_ik = get_pose_bone(c_prefix+arm_rig_names["hand_ik"]+_side)
-    #base_hand = get_pose_bone(prefix+side+'Hand')
-    c_hand_ik['ik_fk_switch'] = 0.0
+    c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
+    # base_hand = get_pose_bone(prefix+side+'Hand')
+    c_hand_ik["ik_fk_switch"] = 0.0
 
     # update
     update_transform()
 
-     #insert key if autokey enable
+    # insert key if autokey enable
     if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        #ik chain
+        # ik chain
         c_hand_ik.keyframe_insert(data_path='["ik_fk_switch"]')
         hand_ik.keyframe_insert(data_path="location")
         hand_ik.keyframe_insert(data_path="rotation_euler")
         hand_ik.keyframe_insert(data_path="scale")
         pole_ik.keyframe_insert(data_path="location")
 
-        #fk chain
+        # fk chain
         hand_fk.keyframe_insert(data_path="location")
         hand_fk.keyframe_insert(data_path="rotation_euler")
         hand_fk.keyframe_insert(data_path="scale")
@@ -784,7 +806,7 @@ def ik_to_fk_arm(self):
 
 
 def bake_fk_to_ik_leg(self):
-    for f in range(self.frame_start, self.frame_end +1):
+    for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
         print("baking frame", f)
 
@@ -813,14 +835,14 @@ def fk_to_ik_leg(self):
 
     # Thigh snap
     snap_rot(thigh_fk, thigh_ik)
-    #thigh_fk.matrix = thigh_ik.matrix.copy()
+    # thigh_fk.matrix = thigh_ik.matrix.copy()
 
     # Leg snap
     snap_rot(leg_fk, leg_ik)
 
     # Foot snap
     snap_rot(foot_fk, foot_snap_ik)
-    foot_fk.scale =foot_ik.scale
+    foot_fk.scale = foot_ik.scale
 
     # Toes snap
     snap_rot(toes_fk, toes_ik)
@@ -831,19 +853,19 @@ def fk_to_ik_leg(self):
     leg_fk.rotation_euler[2] = 0.0
 
     # switch prop value
-    c_foot_ik = get_pose_bone(c_prefix+leg_rig_names["foot_ik"]+_side)
-    #base_foot = get_pose_bone(prefix+side+'Foot')
-    c_foot_ik['ik_fk_switch'] = 1.0
+    c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
+    # base_foot = get_pose_bone(prefix+side+'Foot')
+    c_foot_ik["ik_fk_switch"] = 1.0
 
     # udpate hack
     bpy.context.view_layer.update()
 
-    #if bpy.context.scene.frame_current == 2:
+    # if bpy.context.scene.frame_current == 2:
     #    print(br)
 
-    #insert key if autokey enable
+    # insert key if autokey enable
     if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        #fk chain
+        # fk chain
         c_foot_ik.keyframe_insert(data_path='["ik_fk_switch"]')
         thigh_fk.keyframe_insert(data_path="rotation_euler")
         leg_fk.keyframe_insert(data_path="rotation_euler")
@@ -852,7 +874,7 @@ def fk_to_ik_leg(self):
         toes_fk.keyframe_insert(data_path="rotation_euler")
         toes_fk.keyframe_insert(data_path="scale")
 
-        #ik chain
+        # ik chain
         foot_ik.keyframe_insert(data_path="location")
         foot_ik.keyframe_insert(data_path="rotation_euler")
         foot_ik.keyframe_insert(data_path="scale")
@@ -869,7 +891,7 @@ def fk_to_ik_leg(self):
 
 
 def bake_ik_to_fk_leg(self):
-    for f in range(self.frame_start, self.frame_end +1):
+    for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
         print("baking frame", f)
 
@@ -895,9 +917,8 @@ def ik_to_fk_leg(self):
     foot_01_ik = rig.pose.bones[ik_leg[5] + _side]
     foot_roll_ik = rig.pose.bones[ik_leg[6] + _side]
 
-
     # reset IK foot_01 and foot_roll
-    foot_01_ik.rotation_euler = [0,0,0]
+    foot_01_ik.rotation_euler = [0, 0, 0]
     foot_roll_ik.location[0] = 0.0
     foot_roll_ik.location[2] = 0.0
 
@@ -913,14 +934,14 @@ def ik_to_fk_leg(self):
 
     if len(foot_ik.constraints) > 0:
         for c in foot_ik.constraints:
-            if not c.mute and c.influence > 0.5 and c.type == 'CHILD_OF':
+            if not c.mute and c.influence > 0.5 and c.type == "CHILD_OF":
                 if c.target:
-                    #if bone
-                    if c.target.type == 'ARMATURE':
+                    # if bone
+                    if c.target.type == "ARMATURE":
                         bparent_name = c.subtarget
                         parent_type = "bone"
                         constraint = c
-                    #if object
+                    # if object
                     else:
                         bparent_name = c.target.name
                         parent_type = "object"
@@ -956,15 +977,15 @@ def ik_to_fk_leg(self):
     update_transform()
 
     # switch
-    c_foot_ik = get_pose_bone(c_prefix+leg_rig_names["foot_ik"]+_side)
-    #base_foot = get_pose_bone(prefix+side+'Foot')
-    c_foot_ik['ik_fk_switch'] = 0.0
+    c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
+    # base_foot = get_pose_bone(prefix+side+'Foot')
+    c_foot_ik["ik_fk_switch"] = 0.0
 
     update_transform()
 
-    #insert key if autokey enable
+    # insert key if autokey enable
     if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        #ik chain
+        # ik chain
         c_foot_ik.keyframe_insert(data_path='["ik_fk_switch"]')
         foot_01_ik.keyframe_insert(data_path="rotation_euler")
         foot_roll_ik.keyframe_insert(data_path="location")
@@ -975,7 +996,7 @@ def ik_to_fk_leg(self):
         toes_ik.keyframe_insert(data_path="scale")
         pole_ik.keyframe_insert(data_path="location")
 
-        #fk chain
+        # fk chain
         thigh_fk.keyframe_insert(data_path="rotation_euler")
         leg_fk.keyframe_insert(data_path="rotation_euler")
         foot_fk.keyframe_insert(data_path="rotation_euler")
@@ -997,13 +1018,13 @@ def get_active_child_of_cns(bone):
 
     if len(bone.constraints) > 0:
         for c in bone.constraints:
-            if not c.mute and c.influence > 0.5 and c.type == 'CHILD_OF':
+            if not c.mute and c.influence > 0.5 and c.type == "CHILD_OF":
                 if c.target:
-                    if c.target.type == 'ARMATURE':# bone
+                    if c.target.type == "ARMATURE":  # bone
                         bparent_name = c.subtarget
                         parent_type = "bone"
                         constraint = c
-                    else:# object
+                    else:  # object
                         bparent_name = c.target.name
                         parent_type = "object"
                         constraint = c
@@ -1019,9 +1040,9 @@ def get_active_child_of_cns(bone):
 def is_selected(names, selected_bone_name, startswith=False):
     side = ""
     if get_bone_side(selected_bone_name) != None:
-       side = get_bone_side(selected_bone_name)
+        side = get_bone_side(selected_bone_name)
 
-    _side = "_"+side
+    _side = "_" + side
 
     if startswith == False:
         if type(names) == list:
@@ -1035,7 +1056,7 @@ def is_selected(names, selected_bone_name, startswith=False):
                             return True
         elif names == selected_bone_name:
             return True
-    else:#startswith
+    else:  # startswith
         if type(names) == list:
             for name in names:
                 if selected_bone_name.startswith(name):
@@ -1053,18 +1074,17 @@ def is_selected_prop(pbone, prop_name):
 
 ################## User Interface ##################
 class MR_PT_rig_ui(bpy.types.Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_category = "Tool"
     bl_label = "Mixamo Rig Settings"
     bl_idname = "MR_PT_rig_ui"
 
     @classmethod
     def poll(self, context):
-        if context.mode != 'POSE':
+        if context.mode != "POSE":
             return False
         return True
-
 
     def draw(self, context):
         layout = self.layout
@@ -1078,16 +1098,15 @@ class MR_PT_rig_ui(bpy.types.Panel):
 
         # check if a Mixamo ctrl rig is selected
         if len(rig.data.keys()):
-            if 'mr_control_rig' not in rig.data.keys():
+            if "mr_control_rig" not in rig.data.keys():
                 return
         else:
             return
 
-
         pose_bones = rig.pose.bones
 
         try:
-            active_bone = context.selected_pose_bones[0]#context.active_pose_bone
+            active_bone = context.selected_pose_bones[0]  # context.active_pose_bone
             selected_bone_name = active_bone.name
         except Exception:
             return
@@ -1095,37 +1114,33 @@ class MR_PT_rig_ui(bpy.types.Panel):
         side = get_bone_side(selected_bone_name)
         prefix = get_mixamo_prefix()
 
-       # Leg
-        is_leg = (
-            is_selected(fk_leg, selected_bone_name)
-            or is_selected(ik_leg, selected_bone_name)
+        # Leg
+        is_leg = is_selected(fk_leg, selected_bone_name) or is_selected(
+            ik_leg, selected_bone_name
         )
         if is_leg:
             # IK-FK Switch
             col = layout.column(align=True)
-            #foot_base = get_pose_bone(prefix+side.title()+'Foot')
-            foot_ik_name = c_prefix + leg_rig_names["foot_ik"] + '_' + side.title()
+            # foot_base = get_pose_bone(prefix+side.title()+'Foot')
+            foot_ik_name = c_prefix + leg_rig_names["foot_ik"] + "_" + side.title()
             c_foot_ik = get_pose_bone(foot_ik_name)
             col.prop(c_foot_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK/FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
 
-
         # Arm
-        is_arm = (
-            is_selected(fk_arm, selected_bone_name)
-            or is_selected(ik_arm, selected_bone_name)
+        is_arm = is_selected(fk_arm, selected_bone_name) or is_selected(
+            ik_arm, selected_bone_name
         )
         if is_arm:
             # IK-FK Switch
             col = layout.column(align=True)
-            #hand_base = get_pose_bone(prefix+side.title()+'Hand')
-            hand_ik_name = c_prefix + arm_rig_names["hand_ik"] + '_' + side.title()
+            # hand_base = get_pose_bone(prefix+side.title()+'Hand')
+            hand_ik_name = c_prefix + arm_rig_names["hand_ik"] + "_" + side.title()
             c_hand_ik = get_pose_bone(hand_ik_name)
             col.prop(c_hand_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK-FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
-
 
 
 ##################  REGISTER  ##################
@@ -1140,7 +1155,8 @@ classes = (
     MR_OT_leg_ik_to_fk,
     MR_OT_leg_bake_ik_to_fk,
     MR_PT_rig_ui,
-    MR_OT_switch_snap_anim)
+    MR_OT_switch_snap_anim,
+)
 
 
 def update_mixamo_tab():

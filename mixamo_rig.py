@@ -93,6 +93,8 @@ def _safe_deselect_all():
                 ob.select_set(False)
             except Exception:
                 pass
+
+
 class MR_OT_update(bpy.types.Operator):
     """Update old control rig to Blender 3.0"""
 
@@ -240,40 +242,49 @@ class MR_OT_make_rig(bpy.types.Operator):
     def execute(self, context):
         debug = False
         # ~ layer_select = []
-        original_mode = 'OBJECT'  # Safe default in case mode detection fails
+        original_mode = "OBJECT"  # Safe default in case mode detection fails
 
         try:
             # only select the armature
             # FIRST THING: Store original mode and switch to OBJECT mode immediately
-            if not context.active_object or context.active_object.type != 'ARMATURE':
-                self.report({'ERROR'}, "No armature selected")
-                return {'CANCELLED'}
+            if not context.active_object or context.active_object.type != "ARMATURE":
+                self.report({"ERROR"}, "No armature selected")
+                return {"CANCELLED"}
 
             original_mode = context.active_object.mode
 
             # Validate the mode is a valid string
             valid_modes = [
-                'OBJECT', 'EDIT', 'POSE', 'SCULPT', 'VERTEX_PAINT',
-                'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT',
-                'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'PAINT_GPENCIL',
-                'WEIGHT_GPENCIL', 'VERTEX_GPENCIL'
+                "OBJECT",
+                "EDIT",
+                "POSE",
+                "SCULPT",
+                "VERTEX_PAINT",
+                "WEIGHT_PAINT",
+                "TEXTURE_PAINT",
+                "PARTICLE_EDIT",
+                "EDIT_GPENCIL",
+                "SCULPT_GPENCIL",
+                "PAINT_GPENCIL",
+                "WEIGHT_GPENCIL",
+                "VERTEX_GPENCIL",
             ]
             if not isinstance(original_mode, str) or original_mode not in valid_modes:
                 print(f"WARNING: Invalid mode '{original_mode}', defaulting to OBJECT")
-                original_mode = 'OBJECT'
+                original_mode = "OBJECT"
 
             # Switch to OBJECT mode IMMEDIATELY as first operation
-            if original_mode != 'OBJECT':
+            if original_mode != "OBJECT":
                 try:
-                    if original_mode == 'EDIT':
+                    if original_mode == "EDIT":
                         bpy.ops.object.editmode_toggle()
-                    elif original_mode == 'POSE':
+                    elif original_mode == "POSE":
                         bpy.ops.object.posemode_toggle()
                     else:
-                        bpy.ops.object.mode_set(mode='OBJECT')
+                        bpy.ops.object.mode_set(mode="OBJECT")
                 except Exception as e:
-                    self.report({'ERROR'}, f"Could not switch to OBJECT mode: {e}")
-                    return {'CANCELLED'}
+                    self.report({"ERROR"}, f"Could not switch to OBJECT mode: {e}")
+                    return {"CANCELLED"}
 
             arm = get_object(context.active_object.name)
             _safe_deselect_all()
@@ -339,7 +350,7 @@ class MR_OT_make_rig(bpy.types.Operator):
         try:
             mode_type = type(original_mode)
             print(f"DEBUG: Restoring mode to: '{original_mode}' (type: {mode_type})")
-            if original_mode != 'OBJECT':
+            if original_mode != "OBJECT":
                 bpy.ops.object.mode_set(mode=original_mode)
         except Exception as e:
             print(f"Warning: Could not restore original mode '{original_mode}': {e}")
@@ -361,7 +372,6 @@ class MR_OT_zero_out(bpy.types.Operator):
         return False
 
     def execute(self, context):
-
         try:
             _zero_out(context)
 
@@ -385,7 +395,6 @@ class MR_OT_bake_anim(bpy.types.Operator):
         return False
 
     def execute(self, context):
-
         try:
             _bake_anim(self, context)
 
@@ -440,7 +449,7 @@ class MR_OT_import_anim(bpy.types.Operator):
                 # Ensure the control rig is active before restoring layers
                 try:
                     _safe_deselect_all()
-                    if 'tar_arm' in locals() and tar_arm:
+                    if "tar_arm" in locals() and tar_arm:
                         set_active_object(tar_arm.name)
                 except Exception:
                     pass
@@ -736,8 +745,8 @@ def _make_rig(self, context):
     detected_prefix = ""
     try:
         for bone in rig.data.bones:
-            if bone.name.startswith("mixamorig") and ':' in bone.name:
-                detected_prefix = bone.name.split(':')[0] + ':'
+            if bone.name.startswith("mixamorig") and ":" in bone.name:
+                detected_prefix = bone.name.split(":")[0] + ":"
                 print(f"  Detected Mixamo prefix: {detected_prefix}")
                 break
     except Exception as e:
@@ -759,13 +768,13 @@ def _make_rig(self, context):
 
     # Data structures to store information needed for pose mode
     edit_data = {
-        'master': {},
-        'spine': {},
-        'head': {},
-        'leg_left': {},
-        'leg_right': {},
-        'arm_left': {},
-        'arm_right': {}
+        "master": {},
+        "spine": {},
+        "head": {},
+        "leg_left": {},
+        "leg_right": {},
+        "arm_left": {},
+        "arm_right": {},
     }
 
     # Master bones
@@ -845,22 +854,22 @@ def _make_rig(self, context):
         set_bone_collection(rig, c_spine2, coll_ctrl_name)
 
         # Store data for pose mode
-        edit_data['spine'] = {
-            'exists': True,
-            'hips_name': hips_name,
-            'c_hips_name': c_hips_name,
-            'hips_free_h_name': hips_free_h_name,
-            'c_hips_free_name': c_hips_free_name,
-            'c_spine_name': c_spine_name,
-            'c_spine1_name': c_spine1_name,
-            'c_spine2_name': c_spine2_name,
-            'spine_name': spine_name,
-            'spine1_name': spine1_name,
-            'spine2_name': spine2_name
+        edit_data["spine"] = {
+            "exists": True,
+            "hips_name": hips_name,
+            "c_hips_name": c_hips_name,
+            "hips_free_h_name": hips_free_h_name,
+            "c_hips_free_name": c_hips_free_name,
+            "c_spine_name": c_spine_name,
+            "c_spine1_name": c_spine1_name,
+            "c_spine2_name": c_spine2_name,
+            "spine_name": spine_name,
+            "spine1_name": spine1_name,
+            "spine2_name": spine2_name,
         }
     else:
         print("    Spine bones are missing, skip spine")
-        edit_data['spine']['exists'] = False
+        edit_data["spine"]["exists"] = False
 
     # Head bones
     print("    Creating Head bones...")
@@ -890,19 +899,19 @@ def _make_rig(self, context):
         c_head.parent = c_neck
         set_bone_collection(rig, c_head, coll_ctrl_name)
 
-        edit_data['head'] = {
-            'exists': True,
-            'neck_name': neck_name,
-            'head_name': head_name,
-            'c_neck_name': c_neck_name,
-            'c_head_name': c_head_name
+        edit_data["head"] = {
+            "exists": True,
+            "neck_name": neck_name,
+            "head_name": head_name,
+            "c_neck_name": c_neck_name,
+            "c_head_name": c_head_name,
         }
     else:
         print("    Head or neck bones are missing, skip head")
-        edit_data['head']['exists'] = False
+        edit_data["head"]["exists"] = False
 
     # Leg bones for both sides
-    for side in ['Left', 'Right']:
+    for side in ["Left", "Right"]:
         print(f"    Creating Leg bones for {side}...")
         _side = "_" + side
         thigh_name = get_src_bone_name(side + leg_names["thigh"])
@@ -923,7 +932,7 @@ def _make_rig(self, context):
 
         if not thigh or not calf or not foot or not toe:
             print(f"    Leg bones are missing, skip leg: {side}")
-            edit_data[f'leg_{side.lower()}']['exists'] = False
+            edit_data[f"leg_{side.lower()}"]["exists"] = False
             continue
 
         # Set Mixamo bones in layer
@@ -1226,41 +1235,41 @@ def _make_rig(self, context):
         add_slight_bend(calf_ik, Vector((1, 0, 0)))  # +X axis for both legs
 
         # Store data for pose mode
-        edit_data[f'leg_{side.lower()}'] = {
-            'exists': True,
-            'side': side,
-            'thigh_name': thigh_name,
-            'calf_name': calf_name,
-            'foot_name': foot_name,
-            'toe_name': toe_name,
-            'thigh_ik_name': thigh_ik_name,
-            'calf_ik_name': calf_ik_name,
-            'foot_ik_name': foot_ik_name,
-            'foot_ik_target_name': foot_ik_target_name,
-            'c_foot_ik_name': c_foot_ik_name,
-            'c_pole_ik_name': c_pole_ik_name,
-            'c_thigh_fk_name': c_thigh_fk_name,
-            'c_calf_fk_name': c_calf_fk_name,
-            'c_foot_fk_name': c_foot_fk_name,
-            'foot_fk_name': foot_fk_name,
-            'c_toe_ik_name': c_toe_ik_name,
-            'c_toe_fk_name': c_toe_fk_name,
-            'c_foot_01_name': c_foot_01_name,
-            'c_foot_roll_cursor_name': c_foot_roll_cursor_name,
-            'toes_end_name': toes_end_name,
-            'toes_end_01_name': toes_end_01_name,
-            'toe_01_ik_name': toe_01_ik_name,
-            'toe_02_name': toe_02_name,
-            'toe_track_name': toe_track_name,
-            'heel_mid_name': heel_mid_name,
-            'heel_in_name': heel_in_name,
-            'heel_out_name': heel_out_name,
-            'foot_01_pole_name': foot_01_pole_name,
-            'ik_pole_angle': ik_pole_angle
+        edit_data[f"leg_{side.lower()}"] = {
+            "exists": True,
+            "side": side,
+            "thigh_name": thigh_name,
+            "calf_name": calf_name,
+            "foot_name": foot_name,
+            "toe_name": toe_name,
+            "thigh_ik_name": thigh_ik_name,
+            "calf_ik_name": calf_ik_name,
+            "foot_ik_name": foot_ik_name,
+            "foot_ik_target_name": foot_ik_target_name,
+            "c_foot_ik_name": c_foot_ik_name,
+            "c_pole_ik_name": c_pole_ik_name,
+            "c_thigh_fk_name": c_thigh_fk_name,
+            "c_calf_fk_name": c_calf_fk_name,
+            "c_foot_fk_name": c_foot_fk_name,
+            "foot_fk_name": foot_fk_name,
+            "c_toe_ik_name": c_toe_ik_name,
+            "c_toe_fk_name": c_toe_fk_name,
+            "c_foot_01_name": c_foot_01_name,
+            "c_foot_roll_cursor_name": c_foot_roll_cursor_name,
+            "toes_end_name": toes_end_name,
+            "toes_end_01_name": toes_end_01_name,
+            "toe_01_ik_name": toe_01_ik_name,
+            "toe_02_name": toe_02_name,
+            "toe_track_name": toe_track_name,
+            "heel_mid_name": heel_mid_name,
+            "heel_in_name": heel_in_name,
+            "heel_out_name": heel_out_name,
+            "foot_01_pole_name": foot_01_pole_name,
+            "ik_pole_angle": ik_pole_angle,
         }
 
     # Arm bones for both sides
-    for side in ['Left', 'Right']:
+    for side in ["Left", "Right"]:
         print(f"    Creating Arm bones for {side}...")
         _side = "_" + side
         shoulder_name = get_src_bone_name(side + arm_names["shoulder"])
@@ -1275,7 +1284,7 @@ def _make_rig(self, context):
 
         if not shoulder or not arm or not forearm or not hand:
             print(f"    Arm bones are missing, skip arm: {side}")
-            edit_data[f'arm_{side.lower()}']['exists'] = False
+            edit_data[f"arm_{side.lower()}"]["exists"] = False
             continue
 
         # Create bones
@@ -1455,24 +1464,24 @@ def _make_rig(self, context):
             add_slight_bend(forearm_ik, Vector((0, 0, 1)))  # +Z axis for right
 
         # Store data for pose mode
-        edit_data[f'arm_{side.lower()}'] = {
-            'exists': True,
-            'side': side,
-            'shoulder_name': shoulder_name,
-            'arm_name': arm_name,
-            'forearm_name': forearm_name,
-            'hand_name': hand_name,
-            'c_shoulder_name': c_shoulder_name,
-            'arm_ik_name': arm_ik_name,
-            'forearm_ik_name': forearm_ik_name,
-            'c_arm_fk_name': c_arm_fk_name,
-            'c_forearm_fk_name': c_forearm_fk_name,
-            'c_pole_ik_name': c_pole_ik_name,
-            'c_hand_ik_name': c_hand_ik_name,
-            'c_hand_fk_name': c_hand_fk_name,
-            'fingers_names': fingers_names,
-            'c_fingers_names': c_fingers_names,
-            'ik_pole_angle': ik_pole_angle
+        edit_data[f"arm_{side.lower()}"] = {
+            "exists": True,
+            "side": side,
+            "shoulder_name": shoulder_name,
+            "arm_name": arm_name,
+            "forearm_name": forearm_name,
+            "hand_name": hand_name,
+            "c_shoulder_name": c_shoulder_name,
+            "arm_ik_name": arm_ik_name,
+            "forearm_ik_name": forearm_ik_name,
+            "c_arm_fk_name": c_arm_fk_name,
+            "c_forearm_fk_name": c_forearm_fk_name,
+            "c_pole_ik_name": c_pole_ik_name,
+            "c_hand_ik_name": c_hand_ik_name,
+            "c_hand_fk_name": c_hand_fk_name,
+            "fingers_names": fingers_names,
+            "c_fingers_names": c_fingers_names,
+            "ik_pole_angle": ik_pole_angle,
         }
 
     # Ensure eye bones are in DEF collection
@@ -1497,16 +1506,16 @@ def _make_rig(self, context):
     set_bone_color_group(rig, c_master_pb, "master")
 
     # Spine pose setup
-    if edit_data['spine'].get('exists'):
+    if edit_data["spine"].get("exists"):
         print("    Setting up Spine pose...")
-        spine_data = edit_data['spine']
+        spine_data = edit_data["spine"]
 
-        c_hips_pb = get_pose_bone(spine_data['c_hips_name'])
-        get_pose_bone(spine_data['hips_free_h_name'])
-        c_hips_free_pb = get_pose_bone(spine_data['c_hips_free_name'])
-        c_spine_pb = get_pose_bone(spine_data['c_spine_name'])
-        c_spine1_pb = get_pose_bone(spine_data['c_spine1_name'])
-        c_spine2_pb = get_pose_bone(spine_data['c_spine2_name'])
+        c_hips_pb = get_pose_bone(spine_data["c_hips_name"])
+        get_pose_bone(spine_data["hips_free_h_name"])
+        c_hips_free_pb = get_pose_bone(spine_data["c_hips_free_name"])
+        c_spine_pb = get_pose_bone(spine_data["c_spine_name"])
+        c_spine1_pb = get_pose_bone(spine_data["c_spine1_name"])
+        c_spine2_pb = get_pose_bone(spine_data["c_spine2_name"])
 
         # tag controller bones
         for pb in [c_hips_pb, c_hips_free_pb, c_spine_pb, c_spine1_pb, c_spine2_pb]:
@@ -1534,19 +1543,19 @@ def _make_rig(self, context):
         set_bone_color_group(rig, c_spine2_pb, "body_mid")
 
         # constraints
-        mixamo_spine_pb = get_pose_bone(spine_data['hips_name'])
+        mixamo_spine_pb = get_pose_bone(spine_data["hips_name"])
         cns = mixamo_spine_pb.constraints.get("Copy Transforms")
         if cns is None:
             cns = mixamo_spine_pb.constraints.new("COPY_TRANSFORMS")
             cns.name = "Copy Transforms"
         cns.target = rig
-        cns.subtarget = spine_data['hips_free_h_name']
+        cns.subtarget = spine_data["hips_free_h_name"]
 
         # Spine
         spine_bone_matches = {
-            "1": spine_data['c_spine_name'],
-            "2": spine_data['c_spine1_name'],
-            "3": spine_data['c_spine2_name'],
+            "1": spine_data["c_spine_name"],
+            "2": spine_data["c_spine1_name"],
+            "3": spine_data["c_spine2_name"],
         }
         for str_idx in spine_bone_matches:
             c_name = spine_bone_matches[str_idx]
@@ -1560,12 +1569,12 @@ def _make_rig(self, context):
             cns.subtarget = c_name
 
     # Head pose setup
-    if edit_data['head'].get('exists'):
+    if edit_data["head"].get("exists"):
         print("    Setting up Head pose...")
-        head_data = edit_data['head']
+        head_data = edit_data["head"]
 
-        c_neck_pb = get_pose_bone(head_data['c_neck_name'])
-        c_head_pb = get_pose_bone(head_data['c_head_name'])
+        c_neck_pb = get_pose_bone(head_data["c_neck_name"])
+        c_head_pb = get_pose_bone(head_data["c_head_name"])
 
         # tag controller bones
         c_neck_pb.bone["mixamo_ctrl"] = 1
@@ -1589,44 +1598,44 @@ def _make_rig(self, context):
         set_bone_color_group(rig, c_head_pb, "head")
 
         # constraints
-        neck_pb = get_pose_bone(head_data['neck_name'])
-        head_pb = get_pose_bone(head_data['head_name'])
+        neck_pb = get_pose_bone(head_data["neck_name"])
+        head_pb = get_pose_bone(head_data["head_name"])
 
-        add_copy_transf(neck_pb, rig, head_data['c_neck_name'])
-        add_copy_transf(head_pb, rig, head_data['c_head_name'])
+        add_copy_transf(neck_pb, rig, head_data["c_neck_name"])
+        add_copy_transf(head_pb, rig, head_data["c_head_name"])
 
     # Leg pose setup for both sides
-    for side in ['left', 'right']:
-        if not edit_data[f'leg_{side}'].get('exists'):
+    for side in ["left", "right"]:
+        if not edit_data[f"leg_{side}"].get("exists"):
             continue
 
         print(f"    Setting up Leg pose for {side}...")
-        leg_data = edit_data[f'leg_{side}']
-        _side = "_" + leg_data['side']
+        leg_data = edit_data[f"leg_{side}"]
+        _side = "_" + leg_data["side"]
 
         # Get pose bones
-        calf_ik_pb = get_pose_bone(leg_data['calf_ik_name'])
-        foot_ik_pb = get_pose_bone(leg_data['foot_ik_name'])
-        c_foot_ik_pb = get_pose_bone(leg_data['c_foot_ik_name'])
-        c_pole_ik_pb = get_pose_bone(leg_data['c_pole_ik_name'])
-        toes_end_pb = get_pose_bone(leg_data['toes_end_name'])
-        toe_01_ik_pb = get_pose_bone(leg_data['toe_01_ik_name'])
-        toe_02_pb = get_pose_bone(leg_data['toe_02_name'])
-        toe_track_pb = get_pose_bone(leg_data['toe_track_name'])
-        heel_mid_pb = get_pose_bone(leg_data['heel_mid_name'])
-        heel_in_pb = get_pose_bone(leg_data['heel_in_name'])
-        heel_out_pb = get_pose_bone(leg_data['heel_out_name'])
-        foot_pb = get_pose_bone(leg_data['foot_name'])
-        thigh_pb = get_pose_bone(leg_data['thigh_name'])
-        calf_pb = get_pose_bone(leg_data['calf_name'])
-        toe_pb = get_pose_bone(leg_data['toe_name'])
-        c_foot_01_pb = get_pose_bone(leg_data['c_foot_01_name'])
-        c_foot_roll_cursor_pb = get_pose_bone(leg_data['c_foot_roll_cursor_name'])
-        c_thigh_fk_pb = get_pose_bone(leg_data['c_thigh_fk_name'])
-        c_calf_fk_pb = get_pose_bone(leg_data['c_calf_fk_name'])
-        c_foot_fk_pb = get_pose_bone(leg_data['c_foot_fk_name'])
-        c_toe_ik_pb = get_pose_bone(leg_data['c_toe_ik_name'])
-        c_toe_fk_pb = get_pose_bone(leg_data['c_toe_fk_name'])
+        calf_ik_pb = get_pose_bone(leg_data["calf_ik_name"])
+        foot_ik_pb = get_pose_bone(leg_data["foot_ik_name"])
+        c_foot_ik_pb = get_pose_bone(leg_data["c_foot_ik_name"])
+        c_pole_ik_pb = get_pose_bone(leg_data["c_pole_ik_name"])
+        toes_end_pb = get_pose_bone(leg_data["toes_end_name"])
+        toe_01_ik_pb = get_pose_bone(leg_data["toe_01_ik_name"])
+        toe_02_pb = get_pose_bone(leg_data["toe_02_name"])
+        toe_track_pb = get_pose_bone(leg_data["toe_track_name"])
+        heel_mid_pb = get_pose_bone(leg_data["heel_mid_name"])
+        heel_in_pb = get_pose_bone(leg_data["heel_in_name"])
+        heel_out_pb = get_pose_bone(leg_data["heel_out_name"])
+        foot_pb = get_pose_bone(leg_data["foot_name"])
+        thigh_pb = get_pose_bone(leg_data["thigh_name"])
+        calf_pb = get_pose_bone(leg_data["calf_name"])
+        toe_pb = get_pose_bone(leg_data["toe_name"])
+        c_foot_01_pb = get_pose_bone(leg_data["c_foot_01_name"])
+        c_foot_roll_cursor_pb = get_pose_bone(leg_data["c_foot_roll_cursor_name"])
+        c_thigh_fk_pb = get_pose_bone(leg_data["c_thigh_fk_name"])
+        c_calf_fk_pb = get_pose_bone(leg_data["c_calf_fk_name"])
+        c_foot_fk_pb = get_pose_bone(leg_data["c_foot_fk_name"])
+        c_toe_ik_pb = get_pose_bone(leg_data["c_toe_ik_name"])
+        c_toe_fk_pb = get_pose_bone(leg_data["c_toe_fk_name"])
 
         # Calf IK constraint
         cns_name = "IK"
@@ -1635,10 +1644,10 @@ def _make_rig(self, context):
             ik_cns = calf_ik_pb.constraints.new("IK")
             ik_cns.name = cns_name
         ik_cns.target = rig
-        ik_cns.subtarget = leg_data['foot_ik_target_name']
+        ik_cns.subtarget = leg_data["foot_ik_target_name"]
         ik_cns.pole_target = rig
-        ik_cns.pole_subtarget = leg_data['c_pole_ik_name']
-        ik_cns.pole_angle = leg_data['ik_pole_angle']
+        ik_cns.pole_subtarget = leg_data["c_pole_ik_name"]
+        ik_cns.pole_angle = leg_data["ik_pole_angle"]
         ik_cns.chain_count = 2
         ik_cns.use_tail = True
         ik_cns.use_stretch = False
@@ -1653,7 +1662,7 @@ def _make_rig(self, context):
             copy_loc_cns = foot_ik_pb.constraints.new("COPY_LOCATION")
             copy_loc_cns.name = cns_name
         copy_loc_cns.target = rig
-        copy_loc_cns.subtarget = leg_data['calf_ik_name']
+        copy_loc_cns.subtarget = leg_data["calf_ik_name"]
         copy_loc_cns.head_tail = 1.0
 
         cns_name = "TrackTo"
@@ -1662,7 +1671,7 @@ def _make_rig(self, context):
             cns = foot_ik_pb.constraints.new("TRACK_TO")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_01_name']
+        cns.subtarget = leg_data["c_foot_01_name"]
         cns.head_tail = 0.0
         cns.track_axis = "TRACK_Y"
         cns.up_axis = "UP_Z"
@@ -1674,7 +1683,7 @@ def _make_rig(self, context):
             cns = foot_ik_pb.constraints.new("LOCKED_TRACK")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['foot_01_pole_name']
+        cns.subtarget = leg_data["foot_01_pole_name"]
         cns.head_tail = 0.0
         cns.track_axis = "TRACK_Z"
         cns.lock_axis = "LOCK_Y"
@@ -1685,7 +1694,7 @@ def _make_rig(self, context):
             cns = foot_ik_pb.constraints.new("COPY_SCALE")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_ik_name']
+        cns.subtarget = leg_data["c_foot_ik_name"]
 
         # Foot Ctrl IK
         cns_name = "Child Of"
@@ -1703,7 +1712,7 @@ def _make_rig(self, context):
             child_cns = c_pole_ik_pb.constraints.new("CHILD_OF")
             child_cns.name = cns_name
         child_cns.target = rig
-        child_cns.subtarget = leg_data['c_foot_ik_name']
+        child_cns.subtarget = leg_data["c_foot_ik_name"]
 
         cns_power = 8
 
@@ -1716,7 +1725,7 @@ def _make_rig(self, context):
             cns = toes_end_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_roll_cursor_name']
+        cns.subtarget = leg_data["c_foot_roll_cursor_name"]
         cns.use_motion_extrapolate = True
         cns.target_space = cns.owner_space = "LOCAL"
         cns.map_from = "LOCATION"
@@ -1746,7 +1755,7 @@ def _make_rig(self, context):
             cns = toe_01_ik_pb.constraints.new("COPY_TRANSFORMS")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_toe_ik_name']
+        cns.subtarget = leg_data["c_toe_ik_name"]
         cns.mix_mode = "REPLACE"
         cns.target_space = cns.owner_space = "WORLD"
 
@@ -1757,7 +1766,7 @@ def _make_rig(self, context):
             cns = toe_02_pb.constraints.new("COPY_ROTATION")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_toe_ik_name']
+        cns.subtarget = leg_data["c_toe_ik_name"]
         cns.mix_mode = "REPLACE"
         cns.target_space = cns.owner_space = "WORLD"
 
@@ -1768,7 +1777,7 @@ def _make_rig(self, context):
             cns = toe_track_pb.constraints.new("TRACK_TO")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['toes_end_01_name']
+        cns.subtarget = leg_data["toes_end_01_name"]
         cns.head_tail = 0.0
         cns.track_axis = "TRACK_Y"
         cns.up_axis = "UP_Z"
@@ -1783,7 +1792,7 @@ def _make_rig(self, context):
             cns = heel_mid_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_roll_cursor_name']
+        cns.subtarget = leg_data["c_foot_roll_cursor_name"]
         cns.owner_space = cns.target_space = "LOCAL"
         cns.map_from = "LOCATION"
         cns.from_min_z = -0.25 * len
@@ -1815,7 +1824,7 @@ def _make_rig(self, context):
             cns = heel_in_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_roll_cursor_name']
+        cns.subtarget = leg_data["c_foot_roll_cursor_name"]
         cns.owner_space = cns.target_space = "LOCAL"
         cns.map_from = "LOCATION"
         cns.from_min_x = -0.25 * len
@@ -1835,10 +1844,10 @@ def _make_rig(self, context):
             cns.name = cns_name
         cns.use_limit_y = True
 
-        if leg_data['side'] == "Left":
+        if leg_data["side"] == "Left":
             cns.min_y = 0.0
             cns.max_y = radians(90)
-        elif leg_data['side'] == "Right":
+        elif leg_data["side"] == "Right":
             cns.min_y = radians(-90)
             cns.max_y = radians(0.0)
 
@@ -1853,7 +1862,7 @@ def _make_rig(self, context):
             cns = heel_out_pb.constraints.new("TRANSFORM")
             cns.name = cns_name
         cns.target = rig
-        cns.subtarget = leg_data['c_foot_roll_cursor_name']
+        cns.subtarget = leg_data["c_foot_roll_cursor_name"]
         cns.owner_space = cns.target_space = "LOCAL"
         cns.map_from = "LOCATION"
         cns.from_min_x = -0.25 * len
@@ -1873,10 +1882,10 @@ def _make_rig(self, context):
             cns.name = cns_name
         cns.use_limit_y = True
 
-        if leg_data['side'] == "Left":
+        if leg_data["side"] == "Left":
             cns.min_y = radians(-90)
             cns.max_y = radians(0.0)
-        elif leg_data['side'] == "Right":
+        elif leg_data["side"] == "Right":
             cns.min_y = radians(0.0)
             cns.max_y = radians(90)
 
@@ -1902,7 +1911,7 @@ def _make_rig(self, context):
             cns_ik = thigh_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
-        cns_ik.subtarget = leg_data['thigh_ik_name']
+        cns_ik.subtarget = leg_data["thigh_ik_name"]
         cns_ik.influence = 1.0
 
         cns_name = "FK_follow"
@@ -1911,17 +1920,17 @@ def _make_rig(self, context):
             cns_fk = thigh_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
-        cns_fk.subtarget = leg_data['c_thigh_fk_name']
+        cns_fk.subtarget = leg_data["c_thigh_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + leg_data['thigh_name']
+            + leg_data["thigh_name"]
             + '"].constraints["'
             + cns_name
             + '"].influence',
-            'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -1933,7 +1942,7 @@ def _make_rig(self, context):
             cns_ik = calf_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
-        cns_ik.subtarget = leg_data['calf_ik_name']
+        cns_ik.subtarget = leg_data["calf_ik_name"]
         cns_ik.influence = 1.0
 
         cns_name = "FK_follow"
@@ -1942,13 +1951,13 @@ def _make_rig(self, context):
             cns_fk = calf_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
-        cns_fk.subtarget = leg_data['c_calf_fk_name']
+        cns_fk.subtarget = leg_data["c_calf_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             f'pose.bones["{leg_data["calf_name"]}"].constraints["{cns_name}"].influence',
-            'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -1960,7 +1969,7 @@ def _make_rig(self, context):
             cns_ik = foot_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_name
         cns_ik.target = rig
-        cns_ik.subtarget = leg_data['foot_ik_name']
+        cns_ik.subtarget = leg_data["foot_ik_name"]
         cns_ik.influence = 1.0
 
         cns_name = "FK_follow"
@@ -1969,13 +1978,13 @@ def _make_rig(self, context):
             cns_fk = foot_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_name
         cns_fk.target = rig
-        cns_fk.subtarget = leg_data['foot_fk_name']
+        cns_fk.subtarget = leg_data["foot_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             f'pose.bones["{leg_data["foot_name"]}"].constraints["{cns_name}"].influence',
-            'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -1987,7 +1996,7 @@ def _make_rig(self, context):
             cns_ik_rot = toe_pb.constraints.new("COPY_ROTATION")
             cns_ik_rot.name = cns_name
         cns_ik_rot.target = rig
-        cns_ik_rot.subtarget = leg_data['c_toe_ik_name']
+        cns_ik_rot.subtarget = leg_data["c_toe_ik_name"]
         cns_ik_rot.influence = 1.0
 
         cns_name = "IK_Scale_follow"
@@ -1996,7 +2005,7 @@ def _make_rig(self, context):
             cns_ik_scale = toe_pb.constraints.new("COPY_SCALE")
             cns_ik_scale.name = cns_name
         cns_ik_scale.target = rig
-        cns_ik_scale.subtarget = leg_data['c_toe_ik_name']
+        cns_ik_scale.subtarget = leg_data["c_toe_ik_name"]
         cns_ik_scale.influence = 1.0
 
         cns_name_fk_rot = "FK_Rot_follow"
@@ -2005,7 +2014,7 @@ def _make_rig(self, context):
             cns_fk_rot = toe_pb.constraints.new("COPY_ROTATION")
             cns_fk_rot.name = cns_name_fk_rot
         cns_fk_rot.target = rig
-        cns_fk_rot.subtarget = leg_data['c_toe_fk_name']
+        cns_fk_rot.subtarget = leg_data["c_toe_fk_name"]
         cns_fk_rot.influence = 1.0
 
         cns_name_fk_scale = "FK_Scale_follow"
@@ -2014,28 +2023,28 @@ def _make_rig(self, context):
             cns_fk_scale = toe_pb.constraints.new("COPY_SCALE")
             cns_fk_scale.name = cns_name_fk_scale
         cns_fk_scale.target = rig
-        cns_fk_scale.subtarget = leg_data['c_toe_fk_name']
+        cns_fk_scale.subtarget = leg_data["c_toe_fk_name"]
         cns_fk_scale.influence = 1.0
 
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + leg_data['toe_name']
+            + leg_data["toe_name"]
             + '"].constraints["'
             + cns_name_fk_rot
             + '"].influence',
-            'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + leg_data['toe_name']
+            + leg_data["toe_name"]
             + '"].constraints["'
             + cns_name_fk_scale
             + '"].influence',
-            'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -2086,11 +2095,11 @@ def _make_rig(self, context):
 
         # set custom shape drivers
         ik_controls_names = [
-            leg_data['c_foot_ik_name'],
-            leg_data['c_foot_01_name'],
-            leg_data['c_toe_ik_name'],
-            leg_data['c_foot_roll_cursor_name'],
-            leg_data['c_pole_ik_name'],
+            leg_data["c_foot_ik_name"],
+            leg_data["c_foot_01_name"],
+            leg_data["c_toe_ik_name"],
+            leg_data["c_foot_roll_cursor_name"],
+            leg_data["c_pole_ik_name"],
         ]
 
         arr_ids = [-1]
@@ -2099,20 +2108,20 @@ def _make_rig(self, context):
 
         for n in ik_controls_names:
             dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
-            tar_dp = 'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]'
+            tar_dp = 'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]'
             for arr_id in arr_ids:
                 add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="1-var")
 
         fk_controls_names = [
-            leg_data['c_foot_fk_name'],
-            leg_data['c_thigh_fk_name'],
-            leg_data['c_calf_fk_name'],
-            leg_data['c_toe_fk_name'],
+            leg_data["c_foot_fk_name"],
+            leg_data["c_thigh_fk_name"],
+            leg_data["c_calf_fk_name"],
+            leg_data["c_toe_fk_name"],
         ]
 
         for n in fk_controls_names:
             dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
-            tar_dp = 'pose.bones["' + leg_data['c_foot_ik_name'] + '"]["ik_fk_switch"]'
+            tar_dp = 'pose.bones["' + leg_data["c_foot_ik_name"] + '"]["ik_fk_switch"]'
             for arr_id in arr_ids:
                 add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="var")
 
@@ -2123,26 +2132,26 @@ def _make_rig(self, context):
             set_bone_color_group(rig, pb, "body" + _side.lower())
 
     # Arm pose setup for both sides
-    for side in ['left', 'right']:
-        if not edit_data[f'arm_{side}'].get('exists'):
+    for side in ["left", "right"]:
+        if not edit_data[f"arm_{side}"].get("exists"):
             continue
 
         print(f"    Setting up Arm pose for {side}...")
-        arm_data = edit_data[f'arm_{side}']
-        _side = "_" + arm_data['side']
+        arm_data = edit_data[f"arm_{side}"]
+        _side = "_" + arm_data["side"]
 
         # Get pose bones
-        c_shoulder_pb = get_pose_bone(arm_data['c_shoulder_name'])
-        shoulder_pb = get_pose_bone(arm_data['shoulder_name'])
-        c_arm_fk_pb = get_pose_bone(arm_data['c_arm_fk_name'])
-        forearm_ik_pb = get_pose_bone(arm_data['forearm_ik_name'])
-        c_pole_ik_pb = get_pose_bone(arm_data['c_pole_ik_name'])
-        c_hand_ik_pb = get_pose_bone(arm_data['c_hand_ik_name'])
-        hand_pb = get_pose_bone(arm_data['hand_name'])
-        arm_pb = get_pose_bone(arm_data['arm_name'])
-        forearm_pb = get_pose_bone(arm_data['forearm_name'])
-        c_forearm_fk_pb = get_pose_bone(arm_data['c_forearm_fk_name'])
-        c_hand_fk_pb = get_pose_bone(arm_data['c_hand_fk_name'])
+        c_shoulder_pb = get_pose_bone(arm_data["c_shoulder_name"])
+        shoulder_pb = get_pose_bone(arm_data["shoulder_name"])
+        c_arm_fk_pb = get_pose_bone(arm_data["c_arm_fk_name"])
+        forearm_ik_pb = get_pose_bone(arm_data["forearm_ik_name"])
+        c_pole_ik_pb = get_pose_bone(arm_data["c_pole_ik_name"])
+        c_hand_ik_pb = get_pose_bone(arm_data["c_hand_ik_name"])
+        hand_pb = get_pose_bone(arm_data["hand_name"])
+        arm_pb = get_pose_bone(arm_data["arm_name"])
+        forearm_pb = get_pose_bone(arm_data["forearm_name"])
+        c_forearm_fk_pb = get_pose_bone(arm_data["c_forearm_fk_name"])
+        c_hand_fk_pb = get_pose_bone(arm_data["c_hand_fk_name"])
 
         # Arm FK Ctrl
         cns_name = "Copy Location"
@@ -2152,7 +2161,7 @@ def _make_rig(self, context):
             cns.name = cns_name
         cns.head_tail = 1.0
         cns.target = rig
-        cns.subtarget = arm_data['c_shoulder_name']
+        cns.subtarget = arm_data["c_shoulder_name"]
 
         # Forearm IK
         cns_name = "IK"
@@ -2161,11 +2170,11 @@ def _make_rig(self, context):
             ik_cns = forearm_ik_pb.constraints.new("IK")
             ik_cns.name = cns_name
         ik_cns.target = rig
-        ik_cns.subtarget = arm_data['c_hand_ik_name']
+        ik_cns.subtarget = arm_data["c_hand_ik_name"]
         ik_cns.pole_target = rig
-        ik_cns.pole_subtarget = arm_data['c_pole_ik_name']
+        ik_cns.pole_subtarget = arm_data["c_pole_ik_name"]
         ik_cns.pole_angle = 0.0
-        if arm_data['side'] == "Right":
+        if arm_data["side"] == "Right":
             ik_cns.pole_angle = radians(180)
         ik_cns.chain_count = 2
         ik_cns.use_tail = True
@@ -2193,9 +2202,9 @@ def _make_rig(self, context):
         cns.subtarget = c_master_name
 
         # Fingers
-        for i, fname in enumerate(arm_data['c_fingers_names']):
+        for i, fname in enumerate(arm_data["c_fingers_names"]):
             c_finger_pb = get_pose_bone(fname)
-            finger_pb = get_pose_bone(arm_data['fingers_names'][i])
+            finger_pb = get_pose_bone(arm_data["fingers_names"][i])
             add_copy_transf(finger_pb, rig, c_finger_pb.name)
 
         # Shoulder
@@ -2221,7 +2230,7 @@ def _make_rig(self, context):
             cns_ik = arm_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
-        cns_ik.subtarget = arm_data['arm_ik_name']
+        cns_ik.subtarget = arm_data["arm_ik_name"]
         cns_ik.influence = 1.0
 
         cns_fk_name = "FK_Follow"
@@ -2230,17 +2239,17 @@ def _make_rig(self, context):
             cns_fk = arm_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
-        cns_fk.subtarget = arm_data['c_arm_fk_name']
+        cns_fk.subtarget = arm_data["c_arm_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + arm_data['arm_name']
+            + arm_data["arm_name"]
             + '"].constraints["'
             + cns_fk_name
             + '"].influence',
-            'pose.bones["' + arm_data['c_hand_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + arm_data["c_hand_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -2252,7 +2261,7 @@ def _make_rig(self, context):
             cns_ik = forearm_pb.constraints.new("COPY_TRANSFORMS")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
-        cns_ik.subtarget = arm_data['forearm_ik_name']
+        cns_ik.subtarget = arm_data["forearm_ik_name"]
         cns_ik.influence = 1.0
 
         cns_fk_name = "FK_Follow"
@@ -2261,17 +2270,17 @@ def _make_rig(self, context):
             cns_fk = forearm_pb.constraints.new("COPY_TRANSFORMS")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
-        cns_fk.subtarget = arm_data['c_forearm_fk_name']
+        cns_fk.subtarget = arm_data["c_forearm_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + arm_data['forearm_name']
+            + arm_data["forearm_name"]
             + '"].constraints["'
             + cns_fk_name
             + '"].influence',
-            'pose.bones["' + arm_data['c_hand_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + arm_data["c_hand_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -2285,7 +2294,7 @@ def _make_rig(self, context):
             cns_ik = hand_pb.constraints.new("COPY_ROTATION")
             cns_ik.name = cns_ik_name
         cns_ik.target = rig
-        cns_ik.subtarget = arm_data['c_hand_ik_name']
+        cns_ik.subtarget = arm_data["c_hand_ik_name"]
         cns_ik.influence = 1.0
 
         cns_fk_name = "FK_Follow"
@@ -2294,17 +2303,17 @@ def _make_rig(self, context):
             cns_fk = hand_pb.constraints.new("COPY_ROTATION")
             cns_fk.name = cns_fk_name
         cns_fk.target = rig
-        cns_fk.subtarget = arm_data['c_hand_fk_name']
+        cns_fk.subtarget = arm_data["c_hand_fk_name"]
         cns_fk.influence = 0.0
 
         add_driver_to_prop(
             rig,
             'pose.bones["'
-            + arm_data['hand_name']
+            + arm_data["hand_name"]
             + '"].constraints["'
             + cns_fk_name
             + '"].influence',
-            'pose.bones["' + arm_data['c_hand_ik_name'] + '"]["ik_fk_switch"]',
+            'pose.bones["' + arm_data["c_hand_ik_name"] + '"]["ik_fk_switch"]',
             array_idx=-1,
             exp="var",
         )
@@ -2312,7 +2321,7 @@ def _make_rig(self, context):
         lock_pbone_transform(c_hand_fk_pb, "location", [0, 1, 2])
 
         # Set custom shapes
-        set_bone_custom_shape(c_shoulder_pb, "cs_shoulder_" + arm_data['side'].lower())
+        set_bone_custom_shape(c_shoulder_pb, "cs_shoulder_" + arm_data["side"].lower())
         set_bone_custom_shape(c_arm_fk_pb, "cs_arm_fk")
         set_bone_custom_shape(c_forearm_fk_pb, "cs_forearm_fk")
         set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
@@ -2321,7 +2330,7 @@ def _make_rig(self, context):
 
         c_fingers_pb = []
 
-        for fname in arm_data['c_fingers_names']:
+        for fname in arm_data["c_fingers_names"]:
             finger_pb = get_pose_bone(fname)
             c_fingers_pb.append(finger_pb)
             set_bone_custom_shape(finger_pb, "cs_circle_025")
@@ -2340,7 +2349,7 @@ def _make_rig(self, context):
             pb.bone["mixamo_ctrl"] = 1
 
         # set custom shape drivers
-        ik_controls_names = [arm_data['c_pole_ik_name'], arm_data['c_hand_ik_name']]
+        ik_controls_names = [arm_data["c_pole_ik_name"], arm_data["c_hand_ik_name"]]
 
         arr_ids = [-1]
         if blender_version._float >= 300:
@@ -2348,19 +2357,19 @@ def _make_rig(self, context):
 
         for n in ik_controls_names:
             dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
-            tar_dp = 'pose.bones["' + arm_data['c_hand_ik_name'] + '"]["ik_fk_switch"]'
+            tar_dp = 'pose.bones["' + arm_data["c_hand_ik_name"] + '"]["ik_fk_switch"]'
             for arr_id in arr_ids:
                 add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="1-var")
 
         fk_controls_names = [
-            arm_data['c_arm_fk_name'],
-            arm_data['c_forearm_fk_name'],
-            arm_data['c_hand_fk_name'],
+            arm_data["c_arm_fk_name"],
+            arm_data["c_forearm_fk_name"],
+            arm_data["c_hand_fk_name"],
         ]
 
         for n in fk_controls_names:
             dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
-            tar_dp = 'pose.bones["' + arm_data['c_hand_ik_name'] + '"]["ik_fk_switch"]'
+            tar_dp = 'pose.bones["' + arm_data["c_hand_ik_name"] + '"]["ik_fk_switch"]'
             for arr_id in arr_ids:
                 add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="var")
 
@@ -2403,7 +2412,7 @@ def _zero_out(context):
             )
             # Completely clear animation_data to avoid any dependency graph issues
             arm.animation_data_clear()
-            action_name = stored_action.name if stored_action else 'None'
+            action_name = stored_action.name if stored_action else "None"
             print(f"  Animation data cleared (action was: {action_name})")
         except Exception as e:
             print(f"  Warning: Could not clear animation data: {e}")
@@ -2411,7 +2420,7 @@ def _zero_out(context):
             try:
                 arm.animation_data.action = None
                 has_slots = animation_compat.has_slotted_actions()
-                if has_slots and hasattr(arm.animation_data, 'action_slot'):
+                if has_slots and hasattr(arm.animation_data, "action_slot"):
                     arm.animation_data.action_slot = None
             except Exception:
                 pass
@@ -2536,7 +2545,6 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     to ensure proper helper bone creation.
     """
     print("  Redefining source rest pose...")
-
 
     # Get frame range using compatibility function
     src_action = animation_compat.get_action_from_animdata(src_arm.animation_data)
@@ -2714,9 +2722,9 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     use_name_prefix = False
     detected_prefix = ""
     for bone in src_arm.data.bones:
-        if bone.name.startswith("mixamorig") and ':' in bone.name:
+        if bone.name.startswith("mixamorig") and ":" in bone.name:
             use_name_prefix = True
-            detected_prefix = bone.name.split(':')[0] + ':'
+            detected_prefix = bone.name.split(":")[0] + ":"
             print(f"  Detected Mixamo prefix: {detected_prefix}")
             break
     if not use_name_prefix:
@@ -2812,149 +2820,73 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     bones_map[get_src_bone_name("Spine2")] = c_prefix + "Spine2"
     bones_map[get_src_bone_name("Neck")] = c_prefix + "Neck"
     bones_map[get_src_bone_name("Head")] = c_prefix + "Head"
-    bones_map[get_src_bone_name("LeftShoulder")] = (
-        c_prefix + "Shoulder_Left"
-    )
-    bones_map[get_src_bone_name("RightShoulder")] = (
-        c_prefix + "Shoulder_Right"
-    )
+    bones_map[get_src_bone_name("LeftShoulder")] = c_prefix + "Shoulder_Left"
+    bones_map[get_src_bone_name("RightShoulder")] = c_prefix + "Shoulder_Right"
 
     # Arm
     if arm_left_kinematic == "FK":
         bones_map[get_src_bone_name("LeftArm")] = c_prefix + "Arm_FK_Left"
-        bones_map[get_src_bone_name("LeftForeArm")] = (
-            c_prefix + "ForeArm_FK_Left"
-        )
+        bones_map[get_src_bone_name("LeftForeArm")] = c_prefix + "ForeArm_FK_Left"
         bones_map[get_src_bone_name("LeftHand")] = c_prefix + "Hand_FK_Left"
     elif arm_left_kinematic == "IK":
         bones_map[c_prefix + "Hand_IK_Left"] = c_prefix + "Hand_IK_Left"
 
     if arm_right_kinematic == "FK":
         bones_map[get_src_bone_name("RightArm")] = c_prefix + "Arm_FK_Right"
-        bones_map[get_src_bone_name("RightForeArm")] = (
-            c_prefix + "ForeArm_FK_Right"
-        )
-        bones_map[get_src_bone_name("RightHand")] = (
-            c_prefix + "Hand_FK_Right"
-        )
+        bones_map[get_src_bone_name("RightForeArm")] = c_prefix + "ForeArm_FK_Right"
+        bones_map[get_src_bone_name("RightHand")] = c_prefix + "Hand_FK_Right"
     elif arm_right_kinematic == "IK":
         bones_map[c_prefix + "Hand_IK_Right"] = c_prefix + "Hand_IK_Right"
 
     # Fingers
-    bones_map[get_src_bone_name("LeftHandThumb1")] = (
-        c_prefix + "Thumb1_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandThumb2")] = (
-        c_prefix + "Thumb2_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandThumb3")] = (
-        c_prefix + "Thumb3_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandIndex1")] = (
-        c_prefix + "Index1_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandIndex2")] = (
-        c_prefix + "Index2_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandIndex3")] = (
-        c_prefix + "Index3_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandMiddle1")] = (
-        c_prefix + "Middle1_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandMiddle2")] = (
-        c_prefix + "Middle2_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandMiddle3")] = (
-        c_prefix + "Middle3_Left"
-    )
+    bones_map[get_src_bone_name("LeftHandThumb1")] = c_prefix + "Thumb1_Left"
+    bones_map[get_src_bone_name("LeftHandThumb2")] = c_prefix + "Thumb2_Left"
+    bones_map[get_src_bone_name("LeftHandThumb3")] = c_prefix + "Thumb3_Left"
+    bones_map[get_src_bone_name("LeftHandIndex1")] = c_prefix + "Index1_Left"
+    bones_map[get_src_bone_name("LeftHandIndex2")] = c_prefix + "Index2_Left"
+    bones_map[get_src_bone_name("LeftHandIndex3")] = c_prefix + "Index3_Left"
+    bones_map[get_src_bone_name("LeftHandMiddle1")] = c_prefix + "Middle1_Left"
+    bones_map[get_src_bone_name("LeftHandMiddle2")] = c_prefix + "Middle2_Left"
+    bones_map[get_src_bone_name("LeftHandMiddle3")] = c_prefix + "Middle3_Left"
     bones_map[get_src_bone_name("LeftHandRing1")] = c_prefix + "Ring1_Left"
     bones_map[get_src_bone_name("LeftHandRing2")] = c_prefix + "Ring2_Left"
     bones_map[get_src_bone_name("LeftHandRing3")] = c_prefix + "Ring3_Left"
-    bones_map[get_src_bone_name("LeftHandPinky1")] = (
-        c_prefix + "Pinky1_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandPinky2")] = (
-        c_prefix + "Pinky2_Left"
-    )
-    bones_map[get_src_bone_name("LeftHandPinky3")] = (
-        c_prefix + "Pinky3_Left"
-    )
-    bones_map[get_src_bone_name("RightHandThumb1")] = (
-        c_prefix + "Thumb1_Right"
-    )
-    bones_map[get_src_bone_name("RightHandThumb2")] = (
-        c_prefix + "Thumb2_Right"
-    )
-    bones_map[get_src_bone_name("RightHandThumb3")] = (
-        c_prefix + "Thumb3_Right"
-    )
-    bones_map[get_src_bone_name("RightHandIndex1")] = (
-        c_prefix + "Index1_Right"
-    )
-    bones_map[get_src_bone_name("RightHandIndex2")] = (
-        c_prefix + "Index2_Right"
-    )
-    bones_map[get_src_bone_name("RightHandIndex3")] = (
-        c_prefix + "Index3_Right"
-    )
-    bones_map[get_src_bone_name("RightHandMiddle1")] = (
-        c_prefix + "Middle1_Right"
-    )
-    bones_map[get_src_bone_name("RightHandMiddle2")] = (
-        c_prefix + "Middle2_Right"
-    )
-    bones_map[get_src_bone_name("RightHandMiddle3")] = (
-        c_prefix + "Middle3_Right"
-    )
-    bones_map[get_src_bone_name("RightHandRing1")] = (
-        c_prefix + "Ring1_Right"
-    )
-    bones_map[get_src_bone_name("RightHandRing2")] = (
-        c_prefix + "Ring2_Right"
-    )
-    bones_map[get_src_bone_name("RightHandRing3")] = (
-        c_prefix + "Ring3_Right"
-    )
-    bones_map[get_src_bone_name("RightHandPinky1")] = (
-        c_prefix + "Pinky1_Right"
-    )
-    bones_map[get_src_bone_name("RightHandPinky2")] = (
-        c_prefix + "Pinky2_Right"
-    )
-    bones_map[get_src_bone_name("RightHandPinky3")] = (
-        c_prefix + "Pinky3_Right"
-    )
+    bones_map[get_src_bone_name("LeftHandPinky1")] = c_prefix + "Pinky1_Left"
+    bones_map[get_src_bone_name("LeftHandPinky2")] = c_prefix + "Pinky2_Left"
+    bones_map[get_src_bone_name("LeftHandPinky3")] = c_prefix + "Pinky3_Left"
+    bones_map[get_src_bone_name("RightHandThumb1")] = c_prefix + "Thumb1_Right"
+    bones_map[get_src_bone_name("RightHandThumb2")] = c_prefix + "Thumb2_Right"
+    bones_map[get_src_bone_name("RightHandThumb3")] = c_prefix + "Thumb3_Right"
+    bones_map[get_src_bone_name("RightHandIndex1")] = c_prefix + "Index1_Right"
+    bones_map[get_src_bone_name("RightHandIndex2")] = c_prefix + "Index2_Right"
+    bones_map[get_src_bone_name("RightHandIndex3")] = c_prefix + "Index3_Right"
+    bones_map[get_src_bone_name("RightHandMiddle1")] = c_prefix + "Middle1_Right"
+    bones_map[get_src_bone_name("RightHandMiddle2")] = c_prefix + "Middle2_Right"
+    bones_map[get_src_bone_name("RightHandMiddle3")] = c_prefix + "Middle3_Right"
+    bones_map[get_src_bone_name("RightHandRing1")] = c_prefix + "Ring1_Right"
+    bones_map[get_src_bone_name("RightHandRing2")] = c_prefix + "Ring2_Right"
+    bones_map[get_src_bone_name("RightHandRing3")] = c_prefix + "Ring3_Right"
+    bones_map[get_src_bone_name("RightHandPinky1")] = c_prefix + "Pinky1_Right"
+    bones_map[get_src_bone_name("RightHandPinky2")] = c_prefix + "Pinky2_Right"
+    bones_map[get_src_bone_name("RightHandPinky3")] = c_prefix + "Pinky3_Right"
 
     if leg_left_kinematic == "FK":
-        bones_map[get_src_bone_name("LeftUpLeg")] = (
-            c_prefix + "UpLeg_FK_Left"
-        )
+        bones_map[get_src_bone_name("LeftUpLeg")] = c_prefix + "UpLeg_FK_Left"
         bones_map[get_src_bone_name("LeftLeg")] = c_prefix + "Leg_FK_Left"
         bones_map[c_prefix + "Foot_FK_Left"] = c_prefix + "Foot_FK_Left"
-        bones_map[get_src_bone_name("LeftToeBase")] = (
-            c_prefix + "Toe_FK_Left"
-        )
+        bones_map[get_src_bone_name("LeftToeBase")] = c_prefix + "Toe_FK_Left"
     elif leg_left_kinematic == "IK":
         bones_map[c_prefix + "Foot_IK_Left"] = c_prefix + "Foot_IK_Left"
-        bones_map[get_src_bone_name("LeftToeBase")] = (
-            c_prefix + "Toe_IK_Left"
-        )
+        bones_map[get_src_bone_name("LeftToeBase")] = c_prefix + "Toe_IK_Left"
 
     if leg_right_kinematic == "FK":
-        bones_map[get_src_bone_name("RightUpLeg")] = (
-            c_prefix + "UpLeg_FK_Right"
-        )
+        bones_map[get_src_bone_name("RightUpLeg")] = c_prefix + "UpLeg_FK_Right"
         bones_map[get_src_bone_name("RightLeg")] = c_prefix + "Leg_FK_Right"
         bones_map[c_prefix + "Foot_FK_Right"] = c_prefix + "Foot_FK_Right"
-        bones_map[get_src_bone_name("RightToeBase")] = (
-            c_prefix + "Toe_FK_Right"
-        )
+        bones_map[get_src_bone_name("RightToeBase")] = c_prefix + "Toe_FK_Right"
     elif leg_right_kinematic == "IK":
         bones_map[c_prefix + "Foot_IK_Right"] = c_prefix + "Foot_IK_Right"
-        bones_map[get_src_bone_name("RightToeBase")] = (
-            c_prefix + "Toe_IK_Right"
-        )
+        bones_map[get_src_bone_name("RightToeBase")] = c_prefix + "Toe_IK_Right"
 
     # Store bones data from target armature
     try:
@@ -3257,7 +3189,6 @@ class MR_PT_MenuMain(Panel, MixamoRigPanel):
     bl_label = "Mixamo Control Rig"
 
     def draw(self, context):
-
         layt = self.layout
         layt.use_property_split = True
         layt.use_property_decorate = False
@@ -3282,7 +3213,6 @@ class MR_PT_MenuRig(Panel, MixamoRigPanel):
         layt = self.layout
         layt.use_property_split = True
         layt.use_property_decorate = False
-
 
         """
         has_rigged = False

@@ -115,24 +115,34 @@ def assign_action_to_animdata(anim_data, action, target_datablock=None):
     # Blender 4.4+: explicitly assign an Action Slot if auto-assignment didn't happen
     if has_slotted_actions():
         # Official pattern: use anim_data.action_slot and action_suitable_slots
-        if hasattr(anim_data, 'action_slot'):
+        if hasattr(anim_data, "action_slot"):
             try:
                 if anim_data.action_slot is None:
-                    suitable = getattr(anim_data, 'action_suitable_slots', None)
+                    suitable = getattr(anim_data, "action_suitable_slots", None)
                     if suitable and len(suitable) > 0:
                         # Direct assignment of the slot object
                         anim_data.action_slot = suitable[0]
                     else:
                         # Fallback: ensure a slot by creating/ensuring an FCurve for this datablock
                         # This API will also create the layer/strip/slot and assign it as needed
-                        if target_datablock is not None and hasattr(action, 'fcurve_ensure_for_datablock'):
+                        if target_datablock is not None and hasattr(
+                            action, "fcurve_ensure_for_datablock"
+                        ):
                             try:
                                 # Use a representative data path for the datablock type
-                                data_path = 'location'
-                                if hasattr(target_datablock, 'pose') and hasattr(target_datablock.pose, 'bones') and len(target_datablock.pose.bones) > 0:
-                                    first_bone_name = target_datablock.pose.bones[0].name
+                                data_path = "location"
+                                if (
+                                    hasattr(target_datablock, "pose")
+                                    and hasattr(target_datablock.pose, "bones")
+                                    and len(target_datablock.pose.bones) > 0
+                                ):
+                                    first_bone_name = target_datablock.pose.bones[
+                                        0
+                                    ].name
                                     data_path = f'pose.bones["{first_bone_name}"].rotation_euler'
-                                action.fcurve_ensure_for_datablock(target_datablock, data_path, index=0)
+                                action.fcurve_ensure_for_datablock(
+                                    target_datablock, data_path, index=0
+                                )
                             except Exception:
                                 pass
             except Exception:
@@ -218,7 +228,9 @@ def duplicate_action_assignment(src_anim_data, dst_anim_data):
 
     # In 4.4+, also copy the slot assignment
     if has_slotted_actions():
-        if hasattr(src_anim_data, 'action_slot') and hasattr(dst_anim_data, 'action_slot'):
+        if hasattr(src_anim_data, "action_slot") and hasattr(
+            dst_anim_data, "action_slot"
+        ):
             try:
                 if src_anim_data.action_slot is not None:
                     dst_anim_data.action_slot = src_anim_data.action_slot
@@ -246,7 +258,7 @@ def ensure_fcurve_exists(action, datablock, data_path, index=0):
         return None
 
     # In 4.4+, use the convenience function if available
-    if has_slotted_actions() and hasattr(action, 'fcurve_ensure_for_datablock'):
+    if has_slotted_actions() and hasattr(action, "fcurve_ensure_for_datablock"):
         try:
             return action.fcurve_ensure_for_datablock(datablock, data_path, index=index)
         except Exception:
@@ -275,15 +287,19 @@ def print_action_info(action, verbose=False):
     print(f"Action: {action.name}")
     print(f"  Frame range: {action.frame_range}")
 
-    if has_slotted_actions() and hasattr(action, 'slots'):
+    if has_slotted_actions() and hasattr(action, "slots"):
         print(f"  Slots: {len(action.slots)}")
         if verbose:
             for slot in action.slots:
-                print(f"    - {slot.identifier} ({slot.target_id_type}): {slot.name_display}")
+                print(
+                    f"    - {slot.identifier} ({slot.target_id_type}): {slot.name_display}"
+                )
 
     fcurves = get_action_fcurves(action)
     print(f"  F-Curves: {len(fcurves)}")
 
     if verbose:
         for fc in fcurves:
-            print(f"    - {fc.data_path}[{fc.array_index}]: {len(fc.keyframe_points)} keys")
+            print(
+                f"    - {fc.data_path}[{fc.array_index}]: {len(fc.keyframe_points)} keys"
+            )

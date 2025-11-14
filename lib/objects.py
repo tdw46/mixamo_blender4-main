@@ -10,11 +10,11 @@ def delete_object(obj):
 
     # Clear constraints that target this object to avoid dangling references
     for ob in bpy.data.objects:
-        if ob.type == 'ARMATURE' and ob.pose:
+        if ob.type == "ARMATURE" and ob.pose:
             for pb in ob.pose.bones:
                 if len(pb.constraints):
                     for cns in list(pb.constraints):
-                        if getattr(cns, 'target', None) is obj:
+                        if getattr(cns, "target", None) is obj:
                             cns.target = None
 
     # Prefer direct data-block removal to avoid operator-triggered rebuilds here
@@ -23,9 +23,9 @@ def delete_object(obj):
     except Exception:
         # As a last resort, try operator deletion with OBJECT mode and selection
         try:
-            if bpy.context.object and bpy.context.object.mode != 'OBJECT':
-                bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
+            if bpy.context.object and bpy.context.object.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.select_all(action="DESELECT")
             if obj.name in bpy.context.view_layer.objects:
                 obj.select_set(True)
                 bpy.context.view_layer.objects.active = obj
@@ -36,11 +36,11 @@ def delete_object(obj):
 
 def duplicate_object():
     try:
-        bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
+        bpy.ops.object.duplicate(linked=False, mode="TRANSLATION")
     except Exception as e:
         print(f"Error duplicating object: {e}")
         try:
-            bpy.ops.object.duplicate('TRANSLATION', False)
+            bpy.ops.object.duplicate("TRANSLATION", False)
         except Exception as e:
             print(f"Error duplicating object (fallback): {e}")
 
@@ -91,9 +91,9 @@ def append_cs(names=[]):
             if cs_grp == None:
                 cs_grp = bpy.data.objects.new(name="cs_grp", object_data=None)
                 bpy.context.collection.objects.link(cs_grp)
-                cs_grp.location = [0,0,0]
-                cs_grp.rotation_euler = [0,0,0]
-                cs_grp.scale = [1,1,1]
+                cs_grp.location = [0, 0, 0]
+                cs_grp.rotation_euler = [0, 0, 0]
+                cs_grp.scale = [1, 1, 1]
 
             # parent the custom shape
             obj.parent = cs_grp
