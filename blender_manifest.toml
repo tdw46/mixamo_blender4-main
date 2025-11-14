@@ -20,3 +20,29 @@ copyright = [
   "2024 Adobe, Tyler Walker",
   "2021 Adobe",
 ]
+
+# Build configuration to exclude unnecessary files
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  ".mypy_cache/",
+  "/.git/",
+  "/.github/",
+  ".gitignore",
+  ".gitattributes",
+  "*.pyc",
+  "*.pyo",
+  "*.pyd",
+  "*.zip",
+  "*.log",
+  "*.bat",
+  ".DS_Store",
+  "Thumbs.db",
+  ".vscode/",
+  ".idea/",
+  "*.egg-info/",
+  ".pytest_cache/",
+  ".tox/",
+  ".coverage",
+  "*.sublime-*",
+]
