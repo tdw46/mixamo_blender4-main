@@ -41,9 +41,9 @@ def create_custom_prop(
     soft_max=None,
     default=None,
 ):
-    if soft_min == None:
+    if soft_min is None:
         soft_min = prop_min
-    if soft_max == None:
+    if soft_max is None:
         soft_max = prop_max
 
     if blender_version._float < 300:
@@ -52,7 +52,7 @@ def create_custom_prop(
 
     node[prop_name] = prop_val
 
-    if default == None:
+    if default is None:
         default = prop_val
 
     if blender_version._float < 300:

@@ -16,7 +16,7 @@ def get_mixamo_prefix():
 
         try:
             rig.data["mixamo_prefix"] = p
-        except:  # context error
+        except RuntimeError:  # context error
             pass
 
     return p

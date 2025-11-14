@@ -41,7 +41,7 @@ def get_action_fcurves(action):
         return []
 
     # Legacy API works in both old and new Blender
-    # In 4.4+, action.fcurves is a proxy for action.layers[0].strips[0].channelbag(action.slots[0]).fcurves
+    # In 4.4+, action.fcurves is a proxy for action.layers[0].strips[0].channelbag(action.slots[0]).fcurves  # noqa: E501
     return action.fcurves
 
 
@@ -101,7 +101,7 @@ def assign_action_to_animdata(anim_data, action, target_datablock=None):
     Args:
         anim_data: bpy.types.AnimData
         action: bpy.types.Action
-        target_datablock: The data-block being animated (for slot auto-assignment in 4.4+)
+        target_datablock: The data-block being animated (slot assign)  # noqa: E501
 
     Returns:
         bool: True if successful
@@ -123,8 +123,8 @@ def assign_action_to_animdata(anim_data, action, target_datablock=None):
                         # Direct assignment of the slot object
                         anim_data.action_slot = suitable[0]
                     else:
-                        # Fallback: ensure a slot by creating/ensuring an FCurve for this datablock
-                        # This API will also create the layer/strip/slot and assign it as needed
+                        # Fallback: ensure a slot by creating/ensuring an FCurve for this datablock  # noqa: E501
+                        # This API will also create the layer/strip/slot and assign it as needed  # noqa: E501
                         if target_datablock is not None and hasattr(
                             action, "fcurve_ensure_for_datablock"
                         ):
@@ -139,7 +139,7 @@ def assign_action_to_animdata(anim_data, action, target_datablock=None):
                                     first_bone_name = target_datablock.pose.bones[
                                         0
                                     ].name
-                                    data_path = f'pose.bones["{first_bone_name}"].rotation_euler'
+                                    data_path = f'pose.bones["{first_bone_name}"].rotation_euler'  # noqa: E501
                                 action.fcurve_ensure_for_datablock(
                                     target_datablock, data_path, index=0
                                 )
@@ -292,7 +292,7 @@ def print_action_info(action, verbose=False):
         if verbose:
             for slot in action.slots:
                 print(
-                    f"    - {slot.identifier} ({slot.target_id_type}): {slot.name_display}"
+                    f"    - {slot.identifier} ({slot.target_id_type}): {slot.name_display}"  # noqa: E501
                 )
 
     fcurves = get_action_fcurves(action)
@@ -301,5 +301,5 @@ def print_action_info(action, verbose=False):
     if verbose:
         for fc in fcurves:
             print(
-                f"    - {fc.data_path}[{fc.array_index}]: {len(fc.keyframe_points)} keys"
+                f"    - {fc.data_path}[{fc.array_index}]: {len(fc.keyframe_points)} keys"  # noqa: E501
             )

@@ -4,7 +4,6 @@ from mathutils import Matrix, Vector
 
 
 def mat3_to_vec_roll(mat):
-    vec = mat.col[1]
     vecmat = vec_roll_to_mat3(mat.col[1], 0)
     vecmatinv = vecmat.inverted()
     rollmat = vecmatinv @ mat
@@ -21,14 +20,14 @@ def vec_roll_to_mat3(vec, roll):
     ):  # this seems to be the problem for some bones, no idea how to fix
         axis.normalize()
         theta = target.angle(nor)
-        bMatrix = Matrix.Rotation(theta, 3, axis)
+        b_matrix = Matrix.Rotation(theta, 3, axis)
     else:
         updown = 1 if target.dot(nor) > 0 else -1
-        bMatrix = Matrix.Scale(updown, 3)
-        bMatrix[2][2] = 1.0
+        b_matrix = Matrix.Scale(updown, 3)
+        b_matrix[2][2] = 1.0
 
-    rMatrix = Matrix.Rotation(roll, 3, nor)
-    mat = rMatrix @ bMatrix
+    r_matrix = Matrix.Rotation(roll, 3, nor)
+    mat = r_matrix @ b_matrix
     return mat
 
 

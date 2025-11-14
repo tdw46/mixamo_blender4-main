@@ -44,9 +44,9 @@ if "bpy" in locals():
         importlib.reload(utils)  # noqa: F821
 
 
-import bpy
+import bpy  # noqa: F401
 
-from . import mixamo_rig, mixamo_rig_functions, mixamo_rig_prefs, utils
+from . import mixamo_rig, mixamo_rig_functions, mixamo_rig_prefs, utils  # noqa: F401
 
 
 def register():

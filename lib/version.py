@@ -1,20 +1,20 @@
 import bpy
 
 
-class ARP_blender_version:
+class ArpBlenderVersion:
     _string = bpy.app.version_string
     blender_v = bpy.app.version
     _float = blender_v[0] * 100 + blender_v[1] + blender_v[2] * 0.01
     # _char = bpy.app.version_string
 
 
-blender_version = ARP_blender_version()
+blender_version = ArpBlenderVersion()
 
 
 def convert_drivers_cs_to_xyz(armature):
     # Blender 3.0 requires Vector3 custom_shape_scale values
     # convert single uniform driver to vector3 array drivers
-    drivers_armature = [i for i in armature.animation_data.drivers]
+    drivers_armature = list(armature.animation_data.drivers)
 
     for dr in drivers_armature:
         if "custom_shape_scale" in dr.data_path:

@@ -47,7 +47,7 @@ ik_arm = [
 ################## OPERATOR CLASSES ###################
 
 
-class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
+class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):  # noqa: N801
     """Snaps and bake an FK to an IK arm over a specified frame range"""
 
     bl_idname = "pose.mr_bake_arm_fk_to_ik"
@@ -60,7 +60,7 @@ class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
@@ -96,7 +96,7 @@ class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_arm_fk_to_ik(bpy.types.Operator):
+class MR_OT_arm_fk_to_ik(bpy.types.Operator):  # noqa: N801
     """Snaps an FK arm to an IK arm"""
 
     bl_idname = "pose.mr_arm_fk_to_ik_"
@@ -107,7 +107,7 @@ class MR_OT_arm_fk_to_ik(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -125,7 +125,7 @@ class MR_OT_arm_fk_to_ik(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
+class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):  # noqa: N801
     """Snaps and bake an IK to an FK arm over a specified frame range"""
 
     bl_idname = "pose.mr_bake_arm_ik_to_fk"
@@ -138,7 +138,7 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
@@ -170,7 +170,7 @@ class MR_OT_arm_bake_ik_to_fk(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_arm_ik_to_fk(bpy.types.Operator):
+class MR_OT_arm_ik_to_fk(bpy.types.Operator):  # noqa: N801
     """Snaps an IK arm to an FK arm"""
 
     bl_idname = "pose.mr_arm_ik_to_fk_"
@@ -181,7 +181,7 @@ class MR_OT_arm_ik_to_fk(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -198,7 +198,7 @@ class MR_OT_arm_ik_to_fk(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_switch_snap_anim(bpy.types.Operator):
+class MR_OT_switch_snap_anim(bpy.types.Operator):  # noqa: N801
     """Switch and snap IK-FK over multiple frames"""
 
     bl_idname = "pose.mr_switch_snap_anim"
@@ -217,7 +217,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
@@ -245,7 +245,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
         return wm.invoke_props_dialog(self, width=400)
 
     def execute(self, context):
-        if self.has_action == False:
+        if not self.has_action:
             return {"FINISHED"}
 
         try:
@@ -296,7 +296,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_switch_snap(bpy.types.Operator):
+class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
     """Switch and snap IK-FK for the current frame"""
 
     bl_idname = "pose.mr_switch_snap"
@@ -311,7 +311,7 @@ class MR_OT_switch_snap(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -355,7 +355,7 @@ class MR_OT_switch_snap(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
+class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):  # noqa: N801
     """Snaps and bake an FK leg to an IK leg over a specified frame range"""
 
     bl_idname = "pose.mr_bake_leg_fk_to_ik"
@@ -371,7 +371,7 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
@@ -406,7 +406,7 @@ class MR_OT_leg_bake_fk_to_ik(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_leg_fk_to_ik(bpy.types.Operator):
+class MR_OT_leg_fk_to_ik(bpy.types.Operator):  # noqa: N801
     """Snaps an FK leg to an IK leg"""
 
     bl_idname = "pose.mr_leg_fk_to_ik_"
@@ -420,7 +420,7 @@ class MR_OT_leg_fk_to_ik(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -440,7 +440,7 @@ class MR_OT_leg_fk_to_ik(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
+class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):  # noqa: N801
     """Snaps and bake an IK leg to an FK leg over a specified frame range"""
 
     bl_idname = "pose.mr_bake_leg_ik_to_fk"
@@ -456,7 +456,7 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def draw(self, context):
         layout = self.layout
@@ -492,7 +492,7 @@ class MR_OT_leg_bake_ik_to_fk(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_leg_ik_to_fk(bpy.types.Operator):
+class MR_OT_leg_ik_to_fk(bpy.types.Operator):  # noqa: N801
     """Snaps an IK leg to an FK leg"""
 
     bl_idname = "pose.mr_leg_ik_to_fk_"
@@ -506,7 +506,7 @@ class MR_OT_leg_ik_to_fk(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object != None and context.mode == "POSE"
+        return context.active_object is not None and context.mode == "POSE"
 
     def execute(self, context):
         use_global_undo = context.preferences.edit.use_global_undo
@@ -561,15 +561,15 @@ def snap_pos(pose_bone, target_bone):
                 for i in pose_bone.constraints
                 if i.type == "CHILD_OF"
                 and i.influence == 1.0
-                and i.mute == False
+                and not i.mute
                 and i.target
             ]
             if len(all_child_of_cns) > 0:
                 child_of_cns = all_child_of_cns[
                     0
-                ]  # in case of multiple child of constraints enabled, use only the first for now
+                ]  # in case of multiple child of constraints enabled, use only the first for now  # noqa: E501
 
-        if child_of_cns != None:
+        if child_of_cns is not None:
             if child_of_cns.subtarget != "" and get_pose_bone(child_of_cns.subtarget):
                 # apply double time because of dependecy lag
                 pose_bone.matrix = (
@@ -604,15 +604,15 @@ def snap_pos_matrix(pose_bone, target_bone_matrix):
                 for i in pose_bone.constraints
                 if i.type == "CHILD_OF"
                 and i.influence == 1.0
-                and i.mute == False
+                and not i.mute
                 and i.target
             ]
             if len(all_child_of_cns) > 0:
                 child_of_cns = all_child_of_cns[
                     0
-                ]  # in case of multiple child of constraints enabled, use only the first for now
+                ]  # in case of multiple child of constraints enabled, use only the first for now  # noqa: E501
 
-        if child_of_cns != None:
+        if child_of_cns is not None:
             if child_of_cns.subtarget != "" and get_pose_bone(child_of_cns.subtarget):
                 subtarget_inv = get_pose_bone(
                     child_of_cns.subtarget
@@ -649,11 +649,9 @@ def bake_fk_to_ik_arm(self):
         fk_to_ik_arm(self)
 
 
-def fk_to_ik_arm(self):
+def fk_to_ik_arm(self):  # noqa: F841
     rig = self.rig
-    side = self.side
     _side = self._side
-    prefix = self.prefix
 
     arm_fk = rig.pose.bones[fk_arm[0] + _side]
     forearm_fk = rig.pose.bones[fk_arm[1] + _side]
@@ -717,14 +715,10 @@ def ik_to_fk_arm(self):
     rig = self.rig
     side = self.side
     _side = self._side
-    prefix = self.prefix
 
     arm_fk = rig.pose.bones[fk_arm[0] + _side]
     forearm_fk = rig.pose.bones[fk_arm[1] + _side]
     hand_fk = rig.pose.bones[fk_arm[2] + _side]
-
-    arm_ik = rig.pose.bones[ik_arm[0] + _side]
-    forearm_ik = rig.pose.bones[ik_arm[1] + _side]
     hand_ik = rig.pose.bones[ik_arm[2] + _side]
     pole_ik = rig.pose.bones[ik_arm[3] + _side]
 
@@ -751,7 +745,7 @@ def ik_to_fk_arm(self):
                         parent_type = "object"
                         constraint = c
 
-    if constraint != None:
+    if constraint is not None:
         if parent_type == "bone":
             if bparent_name == "":
                 valid_constraint = False
@@ -813,11 +807,9 @@ def bake_fk_to_ik_leg(self):
         fk_to_ik_leg(self)
 
 
-def fk_to_ik_leg(self):
+def fk_to_ik_leg(self):  # noqa: F841
     rig = self.rig
-    side = self.side
     _side = self._side
-    prefix = self.prefix
 
     thigh_fk = rig.pose.bones[fk_leg[0] + _side]
     leg_fk = rig.pose.bones[fk_leg[1] + _side]
@@ -893,24 +885,24 @@ def fk_to_ik_leg(self):
 def bake_ik_to_fk_leg(self):
     for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
-        print("baking frame", f)
+        print("baking frame", f)  # noqa: F401
 
         ik_to_fk_leg(self)
 
 
-def ik_to_fk_leg(self):
+def ik_to_fk_leg(self):  # noqa: F841
     rig = self.rig
-    side = self.side
+    side = self.side  # noqa: F841
     _side = self._side
-    prefix = self.prefix
+    prefix = self.prefix  # noqa: F841
 
     thigh_fk = rig.pose.bones[fk_leg[0] + _side]
     leg_fk = rig.pose.bones[fk_leg[1] + _side]
     foot_fk = rig.pose.bones[fk_leg[2] + _side]
     toes_fk = rig.pose.bones[fk_leg[3] + _side]
 
-    thigh_ik = rig.pose.bones[ik_leg[0] + _side]
-    calf_ik = rig.pose.bones[ik_leg[1] + _side]
+    thigh_ik = rig.pose.bones[ik_leg[0] + _side]  # noqa: F841
+    calf_ik = rig.pose.bones[ik_leg[1] + _side]  # noqa: F841
     foot_ik = rig.pose.bones[ik_leg[2] + _side]
     pole_ik = rig.pose.bones[ik_leg[3] + _side]
     toes_ik = rig.pose.bones[ik_leg[4] + _side]
@@ -947,7 +939,7 @@ def ik_to_fk_leg(self):
                         parent_type = "object"
                         constraint = c
 
-    if constraint != None:
+    if constraint is not None:
         if parent_type == "bone":
             if bparent_name == "":
                 valid_constraint = False
@@ -1039,13 +1031,13 @@ def get_active_child_of_cns(bone):
 
 def is_selected(names, selected_bone_name, startswith=False):
     side = ""
-    if get_bone_side(selected_bone_name) != None:
+    if get_bone_side(selected_bone_name) is not None:
         side = get_bone_side(selected_bone_name)
 
     _side = "_" + side
 
-    if startswith == False:
-        if type(names) == list:
+    if not startswith:
+        if isinstance(names, list):
             for name in names:
                 if "." not in name[-2:]:
                     if name + _side == selected_bone_name:
@@ -1057,7 +1049,7 @@ def is_selected(names, selected_bone_name, startswith=False):
         elif names == selected_bone_name:
             return True
     else:  # startswith
-        if type(names) == list:
+        if isinstance(names, list):
             for name in names:
                 if selected_bone_name.startswith(name):
                     return True
@@ -1073,7 +1065,7 @@ def is_selected_prop(pbone, prop_name):
 
 
 ################## User Interface ##################
-class MR_PT_rig_ui(bpy.types.Panel):
+class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Tool"
@@ -1081,17 +1073,16 @@ class MR_PT_rig_ui(bpy.types.Panel):
     bl_idname = "MR_PT_rig_ui"
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         if context.mode != "POSE":
             return False
         return True
 
-    def draw(self, context):
+    def draw(self, context):  # noqa: F841
         layout = self.layout
-        scn = bpy.context.scene
         rig = context.active_object
 
-        if rig == None:
+        if rig is None:
             return
         if rig.type != "ARMATURE":
             return
@@ -1103,7 +1094,7 @@ class MR_PT_rig_ui(bpy.types.Panel):
         else:
             return
 
-        pose_bones = rig.pose.bones
+        pose_bones = rig.pose.bones  # noqa: F841
 
         try:
             active_bone = context.selected_pose_bones[0]  # context.active_pose_bone
@@ -1111,8 +1102,7 @@ class MR_PT_rig_ui(bpy.types.Panel):
         except Exception:
             return
 
-        side = get_bone_side(selected_bone_name)
-        prefix = get_mixamo_prefix()
+        side = get_bone_side(selected_bone_name)  # noqa: F841
 
         # Leg
         is_leg = is_selected(fk_leg, selected_bone_name) or is_selected(

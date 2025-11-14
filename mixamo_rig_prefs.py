@@ -10,11 +10,11 @@ def update_all_tab_names(self, context):
         pass
 
 
-class MR_MT_addon_preferences(bpy.types.AddonPreferences):
+class MR_MT_addon_preferences(bpy.types.AddonPreferences):  # noqa: N801
     bl_idname = __package__
     mixamo_tab_name: bpy.props.StringProperty(
         name="Interface Tab",
-        description="Name of the tab to display the interface in",
+        description="Name of the tab to display the interface in",  # noqa: E501
         default="Mixamo",
         update=update_all_tab_names,
     )

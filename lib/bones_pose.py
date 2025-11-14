@@ -64,9 +64,9 @@ def set_bone_color_group(obj, pb, grp_name):
     blue_light = (0.365, 0.851, 1.0)
 
     # base color
-    green = (0.0, 1.0, 0.0)
-    red = (1.0, 0.0, 0.0)
-    blue = (0.0, 0.9, 1.0)
+    green = (0.0, 1.0, 0.0)  # noqa: F841
+    red = (1.0, 0.0, 0.0)  # noqa: F841
+    blue = (0.0, 0.9, 1.0)  # noqa: F841
 
     grp_color_master = orange_light
     grp_color_neck = orange_light

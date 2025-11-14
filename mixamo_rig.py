@@ -95,7 +95,7 @@ def _safe_deselect_all():
                 pass
 
 
-class MR_OT_update(bpy.types.Operator):
+class MR_OT_update(bpy.types.Operator):  # noqa: N801
     """Update old control rig to Blender 3.0"""
 
     bl_idname = "mr.update"
@@ -117,7 +117,7 @@ class MR_OT_update(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_exportGLTF(bpy.types.Operator):
+class MR_OT_exportGLTF(bpy.types.Operator):  # noqa: N801
     """Export to GLTF format"""
 
     bl_idname = "mr.export_gltf"
@@ -139,7 +139,7 @@ class MR_OT_exportGLTF(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_apply_shape(bpy.types.Operator):
+class MR_OT_apply_shape(bpy.types.Operator):  # noqa: N801
     """Apply the selected shape"""
 
     bl_idname = "mr.apply_shape"
@@ -164,7 +164,7 @@ class MR_OT_apply_shape(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_edit_custom_shape(bpy.types.Operator):
+class MR_OT_edit_custom_shape(bpy.types.Operator):  # noqa: N801
     """Edit the selected bone shape"""
 
     bl_idname = "mr.edit_custom_shape"
@@ -191,7 +191,7 @@ class MR_OT_edit_custom_shape(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_make_rig(bpy.types.Operator):
+class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
     """Generate a control rig from the selected Mixamo skeleton"""
 
     bl_idname = "mr.make_rig"
@@ -358,7 +358,7 @@ class MR_OT_make_rig(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_zero_out(bpy.types.Operator):
+class MR_OT_zero_out(bpy.types.Operator):  # noqa: N801
     """Delete all keys and set every bones to (0,0,0) rotation"""
 
     bl_idname = "mr.zero_out"
@@ -381,7 +381,7 @@ class MR_OT_zero_out(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_bake_anim(bpy.types.Operator):
+class MR_OT_bake_anim(bpy.types.Operator):  # noqa: N801
     """Merge all animation layers (see NLA editor) into a single layer"""
 
     bl_idname = "mr.bake_anim"
@@ -404,7 +404,7 @@ class MR_OT_bake_anim(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class MR_OT_import_anim(bpy.types.Operator):
+class MR_OT_import_anim(bpy.types.Operator):  # noqa: N801
     """Import an animation file (FBX) of the same character to the control rig"""
 
     bl_idname = "mr.import_anim_to_rig"
@@ -941,7 +941,7 @@ def _make_rig(self, context):
 
         # Create bones
         # correct straight leg angle
-        def get_leg_angle():
+        def get_leg_angle(thigh=thigh, calf=calf, foot=foot):  # noqa: B023
             vec1 = calf.head - thigh.head
             vec2 = foot.head - calf.head
             return degrees(vec1.angle(vec2))
@@ -1343,7 +1343,7 @@ def _make_rig(self, context):
         # correct straight arms angle
         angle_min = 0.1
 
-        def get_arm_angle():
+        def get_arm_angle(arm=arm, forearm=forearm, hand=hand):  # noqa: B023
             vec1 = forearm.head - arm.head
             vec2 = hand.head - forearm.head
             return degrees(vec1.angle(vec2))
@@ -3185,7 +3185,7 @@ class MixamoRigPanel:
     bl_category = "Mixamo"
 
 
-class MR_PT_MenuMain(Panel, MixamoRigPanel):
+class MR_PT_MenuMain(Panel, MixamoRigPanel):  # noqa: N801
     bl_label = "Mixamo Control Rig"
 
     def draw(self, context):
@@ -3205,7 +3205,7 @@ class MR_PT_MenuMain(Panel, MixamoRigPanel):
         layt.label(text="Character: " + arm_name)
 
 
-class MR_PT_MenuRig(Panel, MixamoRigPanel):
+class MR_PT_MenuRig(Panel, MixamoRigPanel):  # noqa: N801
     bl_label = "Control Rig"
     bl_parent_id = "MR_PT_MenuMain"
 
@@ -3238,7 +3238,7 @@ class MR_PT_MenuRig(Panel, MixamoRigPanel):
             col.operator(MR_OT_apply_shape.bl_idname, text="Apply Control Shape")
 
 
-class MR_PT_MenuAnim(Panel, MixamoRigPanel):
+class MR_PT_MenuAnim(Panel, MixamoRigPanel):  # noqa: N801
     bl_label = "Animation"
     bl_parent_id = "MR_PT_MenuMain"
 
@@ -3268,7 +3268,7 @@ class MR_PT_MenuAnim(Panel, MixamoRigPanel):
         col.operator(MR_OT_bake_anim.bl_idname, text="Bake Animation")
 
 
-class MR_PT_MenuUpdate(Panel, MixamoRigPanel):
+class MR_PT_MenuUpdate(Panel, MixamoRigPanel):  # noqa: N801
     bl_label = "Update"
     bl_parent_id = "MR_PT_MenuMain"
 
@@ -3277,7 +3277,7 @@ class MR_PT_MenuUpdate(Panel, MixamoRigPanel):
         layt.operator(MR_OT_update.bl_idname, text="Update Control Rig")
 
 
-class MR_PT_MenuExport(Panel, MixamoRigPanel):
+class MR_PT_MenuExport(Panel, MixamoRigPanel):  # noqa: N801
     bl_label = "Export"
     bl_parent_id = "MR_PT_MenuMain"
 

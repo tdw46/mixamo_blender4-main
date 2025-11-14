@@ -92,13 +92,13 @@ def bake_anim(
                                     )
                                 else:
                                     print(
-                                        f"Subtarget bone not found: {child_of_cns.subtarget}"
+                                        f"Subtarget bone not found: {child_of_cns.subtarget}"  # noqa: E501
                                     )
                     else:
                         print(f"No Child Of constraint found for {pbone.name}")
                 else:
                     print(
-                        f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}"
+                        f"Warning: Could not find bones {b1_name} or {b2_name} for IK pole {pbone.name}"  # noqa: E501
                     )
                     continue
 
@@ -201,7 +201,7 @@ def bake_anim(
                 fcurve = animation_compat.ensure_fcurve_exists(
                     action, armature, data_path, index=index
                 )
-                # ensure the fcurve is grouped under the bone name (harmless if already set)
+                # ensure the fcurve is grouped under the bone name (harmless if already set)  # noqa: E501
                 try:
                     if fcurve.group is None or fcurve.group.name != pb.name:
                         grp = action.groups.get(pb.name) or action.groups.new(pb.name)
@@ -215,7 +215,7 @@ def bake_anim(
 
                 if (
                     blender_version._float >= 290
-                ):  # internal error when doing so with Blender 2.83, only for Blender 2.90 and higher
+                ):  # internal error when doing so with Blender 2.83, only for Blender 2.90 and higher  # noqa: E501
                     linear_enum_value = (
                         bpy.types.Keyframe.bl_rna.properties["interpolation"]
                         .enum_items["LINEAR"]

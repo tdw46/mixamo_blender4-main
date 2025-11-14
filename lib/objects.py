@@ -63,13 +63,15 @@ def hide_object(obj_to_set):
 
 
 def is_object_hidden(obj_to_get):
-    if obj_to_get.hide_get() == False and obj_to_get.hide_viewport == False:
+    if not obj_to_get.hide_get() and not obj_to_get.hide_viewport:
         return False
     else:
         return True
 
 
-def append_cs(names=[]):
+def append_cs(names=None):
+    if names is None:
+        names = []
     context = bpy.context
     scene = context.scene
     addon_directory = os.path.dirname(os.path.abspath(__file__))
@@ -88,7 +90,7 @@ def append_cs(names=[]):
             scene.collection.objects.link(obj)
 
             cs_grp = bpy.data.objects.get("cs_grp")
-            if cs_grp == None:
+            if cs_grp is None:
                 cs_grp = bpy.data.objects.new(name="cs_grp", object_data=None)
                 bpy.context.collection.objects.link(cs_grp)
                 cs_grp.location = [0, 0, 0]

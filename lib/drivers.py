@@ -1,18 +1,18 @@
 def add_driver_to_prop(obj, dr_dp, tar_dp, array_idx=-1, exp="var"):
-    if obj.animation_data == None:
+    if obj.animation_data is None:
         obj.animation_data_create()
 
     drivers_list = obj.animation_data.drivers
     dr = drivers_list.find(dr_dp, index=array_idx)
 
-    if dr == None:
+    if dr is None:
         dr = obj.driver_add(dr_dp, array_idx)
 
     dr.driver.expression = exp
 
     var = dr.driver.variables.get("var")
 
-    if var == None:
+    if var is None:
         var = dr.driver.variables.new()
 
     var.type = "SINGLE_PROP"

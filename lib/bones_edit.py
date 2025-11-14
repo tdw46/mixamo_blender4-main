@@ -14,7 +14,7 @@ def copy_bone_transforms(bone1, bone2):
 
 def create_edit_bone(bone_name, deform=False):
     b = get_edit_bone(bone_name)
-    if b == None:
+    if b is None:
         b = bpy.context.active_object.data.edit_bones.new(bone_name)
         b.use_deform = deform
     return b
