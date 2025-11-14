@@ -24,18 +24,22 @@ REM Run the build command
 echo Running Blender extension build...
 "%BLENDER_PATH%" --command extension build --source-dir "%EXTENSION_DIR%" --output-dir "%EXTENSION_DIR%"
 
-if %ERRORLEVEL% EQU 0 (
-    echo.
+REM Check if the build package was created (ignore Blender's exit code due to addon conflicts)
+echo.
+if exist "%EXTENSION_DIR%\mixamo_rig-*.zip" (
     echo ========================================
     echo Build completed successfully!
     echo ========================================
     echo.
-    echo Package created in: %EXTENSION_DIR%
+    for %%F in ("%EXTENSION_DIR%\mixamo_rig-*.zip") do (
+        echo Package created: %%~nxF
+        echo Size: %%~zF bytes
+    )
+    echo Location: %EXTENSION_DIR%
     echo.
 ) else (
-    echo.
     echo ========================================
-    echo Build failed with error code: %ERRORLEVEL%
+    echo Build failed - package not created
     echo ========================================
     echo.
 )
