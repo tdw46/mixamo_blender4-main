@@ -117,6 +117,32 @@ class MR_OT_update(bpy.types.Operator):  # noqa: N801
         return {"FINISHED"}
 
 
+class MR_OT_reconnect_rig(bpy.types.Operator):  # noqa: N801
+    """Rebuild all constraints for the existing Mixamo control rig"""
+
+    bl_idname = "mr.reconnect_rig"
+    bl_label = "reconnect_rig"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        if obj and obj.type == "ARMATURE":
+            return "mr_control_rig" in obj.data.keys()
+        return False
+
+    def execute(self, context):
+        use_global_undo = context.preferences.edit.use_global_undo
+        context.preferences.edit.use_global_undo = False
+
+        try:
+            _reconnect_rig_constraints(context)
+        finally:
+            context.preferences.edit.use_global_undo = use_global_undo
+
+        return {"FINISHED"}
+
+
 class MR_OT_exportGLTF(bpy.types.Operator):  # noqa: N801
     """Export to GLTF format"""
 
@@ -678,6 +704,996 @@ def _reset_inverse_constraints():
 
     bpy.ops.object.mode_set(mode="OBJECT")
 
+
+def _reconnect_rig_constraints(context):
+    obj = context.active_object
+    if not obj or obj.type != "ARMATURE":
+        return
+
+    rig = obj
+
+    if "mr_control_rig" not in rig.data.keys():
+        return
+
+    try:
+        bpy.ops.object.mode_set(mode="POSE")
+    except Exception:
+        return
+
+    for pb in rig.pose.bones:
+        while pb.constraints:
+            pb.constraints.remove(pb.constraints[0])
+
+    _build_constraints_for_rig(rig)
+
+
+def _build_constraints_for_rig(rig):
+    detected_prefix = ""
+    try:
+        for bone in rig.data.bones:
+            if bone.name.startswith("mixamorig") and ":" in bone.name:
+                detected_prefix = bone.name.split(":")[0] + ":"
+                break
+    except Exception:
+        pass
+
+    def get_src_bone_name(base_name):
+        if detected_prefix:
+            return detected_prefix + base_name
+        return base_name
+
+    bpy.ops.object.mode_set(mode="POSE")
+
+    c_master_name = c_prefix + master_rig_names["master"]
+
+    if get_pose_bone(c_master_name) is None:
+        return
+
+    if get_pose_bone(c_master_name) is not None:
+        c_master_pb = get_pose_bone(c_master_name)
+        c_master_pb.bone["mixamo_ctrl"] = 1
+        set_bone_custom_shape(c_master_pb, "cs_master")
+        c_master_pb.rotation_mode = "XYZ"
+        set_bone_color_group(rig, c_master_pb, "master")
+
+    hips_name = get_src_bone_name(spine_names["pelvis"])
+    c_hips_name = c_prefix + spine_rig_names["pelvis"]
+    hips_free_h_name = spine_rig_names["hips_free_helper"]
+    c_hips_free_name = c_prefix + spine_rig_names["hips_free"]
+    c_spine_name = c_prefix + spine_rig_names["spine1"]
+    c_spine1_name = c_prefix + spine_rig_names["spine2"]
+    c_spine2_name = c_prefix + spine_rig_names["spine3"]
+
+    mixamo_spine_pb = get_pose_bone(hips_name)
+    c_hips_pb = get_pose_bone(c_hips_name)
+    hips_free_h_pb = get_pose_bone(hips_free_h_name)
+    c_hips_free_pb = get_pose_bone(c_hips_free_name)
+    c_spine_pb = get_pose_bone(c_spine_name)
+    c_spine1_pb = get_pose_bone(c_spine1_name)
+    c_spine2_pb = get_pose_bone(c_spine2_name)
+
+    if mixamo_spine_pb and hips_free_h_pb:
+        cns = mixamo_spine_pb.constraints.get("Copy Transforms")
+        if cns is None:
+            cns = mixamo_spine_pb.constraints.new("COPY_TRANSFORMS")
+            cns.name = "Copy Transforms"
+        cns.target = rig
+        cns.subtarget = hips_free_h_name
+
+    if (
+        c_hips_pb
+        and c_hips_free_pb
+        and c_spine_pb
+        and c_spine1_pb
+        and c_spine2_pb
+    ):
+        for pb in [c_hips_pb, c_hips_free_pb, c_spine_pb, c_spine1_pb, c_spine2_pb]:
+            pb.bone["mixamo_ctrl"] = 1
+
+        set_bone_custom_shape(c_hips_pb, "cs_square_2")
+        set_bone_custom_shape(c_hips_free_pb, "cs_hips")
+        set_bone_custom_shape(c_spine_pb, "cs_circle")
+        set_bone_custom_shape(c_spine1_pb, "cs_circle")
+        set_bone_custom_shape(c_spine2_pb, "cs_circle")
+
+        c_hips_pb.rotation_mode = "XYZ"
+        c_hips_free_pb.rotation_mode = "XYZ"
+        c_spine_pb.rotation_mode = "XYZ"
+        c_spine1_pb.rotation_mode = "XYZ"
+        c_spine2_pb.rotation_mode = "XYZ"
+
+        set_bone_color_group(rig, c_hips_pb, "root_master")
+        set_bone_color_group(rig, c_hips_free_pb, "body_mid")
+        set_bone_color_group(rig, c_spine_pb, "body_mid")
+        set_bone_color_group(rig, c_spine1_pb, "body_mid")
+        set_bone_color_group(rig, c_spine2_pb, "body_mid")
+
+        spine_bone_matches = {
+            "1": c_spine_name,
+            "2": c_spine1_name,
+            "3": c_spine2_name,
+        }
+        for str_idx in spine_bone_matches:
+            c_name = spine_bone_matches[str_idx]
+            mixamo_bname = get_src_bone_name(spine_names["spine" + str_idx])
+            mixamo_spine_pb = get_pose_bone(mixamo_bname)
+            if mixamo_spine_pb is None:
+                continue
+            cns = mixamo_spine_pb.constraints.get("Copy Transforms")
+            if cns is None:
+                cns = mixamo_spine_pb.constraints.new("COPY_TRANSFORMS")
+                cns.name = "Copy Transforms"
+            cns.target = rig
+            cns.subtarget = c_name
+
+    neck_name = get_src_bone_name(head_names["neck"])
+    head_name = get_src_bone_name(head_names["head"])
+    c_neck_name = c_prefix + head_rig_names["neck"]
+    c_head_name = c_prefix + head_rig_names["head"]
+
+    neck_pb = get_pose_bone(neck_name)
+    head_pb = get_pose_bone(head_name)
+    c_neck_pb = get_pose_bone(c_neck_name)
+    c_head_pb = get_pose_bone(c_head_name)
+
+    if c_neck_pb and c_head_pb:
+        c_neck_pb.bone["mixamo_ctrl"] = 1
+        c_head_pb.bone["mixamo_ctrl"] = 1
+
+        set_bone_custom_shape(c_neck_pb, "cs_neck")
+        set_bone_custom_shape(c_head_pb, "cs_head")
+
+        c_head_pb.custom_shape_scale_xyz[0] = 1.9
+        c_head_pb.custom_shape_scale_xyz[1] = 1.9
+        c_head_pb.custom_shape_scale_xyz[2] = 1.9
+
+        c_neck_pb.rotation_mode = "XYZ"
+        c_head_pb.rotation_mode = "XYZ"
+
+        set_bone_color_group(rig, c_neck_pb, "neck")
+        set_bone_color_group(rig, c_head_pb, "head")
+
+    if neck_pb and c_neck_pb:
+        add_copy_transf(neck_pb, rig, c_neck_name)
+    if head_pb and c_head_pb:
+        add_copy_transf(head_pb, rig, c_head_name)
+
+    for side in ["Left", "Right"]:
+        _side = "_" + side
+
+        thigh_name = get_src_bone_name(side + leg_names["thigh"])
+        calf_name = get_src_bone_name(side + leg_names["calf"])
+        foot_name = get_src_bone_name(side + leg_names["foot"])
+        toe_name = get_src_bone_name(side + leg_names["toes"])
+
+        thigh_pb = get_pose_bone(thigh_name)
+        calf_pb = get_pose_bone(calf_name)
+        foot_pb = get_pose_bone(foot_name)
+        toe_pb = get_pose_bone(toe_name)
+
+        calf_ik_name = leg_rig_names["calf_ik"] + _side
+        foot_ik_name = leg_rig_names["foot_ik"] + _side
+        c_foot_ik_name = c_prefix + leg_rig_names["foot_ik"] + _side
+        c_pole_ik_name = c_prefix + leg_rig_names["pole_ik"] + _side
+        toes_end_name = leg_rig_names["toes_end"] + _side
+        toe_01_ik_name = leg_rig_names["toes_01_ik"] + _side
+        toe_02_name = leg_rig_names["toes_02"] + _side
+        toe_track_name = leg_rig_names["toes_track"] + _side
+        heel_mid_name = leg_rig_names["heel_mid"] + _side
+        heel_in_name = leg_rig_names["heel_in"] + _side
+        heel_out_name = leg_rig_names["heel_out"] + _side
+        c_foot_01_name = c_prefix + leg_rig_names["foot_01"] + _side
+        c_foot_roll_cursor_name = c_prefix + leg_rig_names["foot_roll_cursor"] + _side
+        foot_ik_target_name = leg_rig_names["foot_ik_target"] + _side
+        foot_01_pole_name = leg_rig_names["foot_01_pole"] + _side
+        c_thigh_fk_name = c_prefix + leg_rig_names["thigh_fk"] + _side
+        c_calf_fk_name = c_prefix + leg_rig_names["calf_fk"] + _side
+        c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
+        c_toe_ik_name = c_prefix + leg_rig_names["toes_ik"] + _side
+        c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
+        foot_fk_name = leg_rig_names["foot_fk"] + _side
+
+        calf_ik_pb = get_pose_bone(calf_ik_name)
+        foot_ik_pb = get_pose_bone(foot_ik_name)
+        c_foot_ik_pb = get_pose_bone(c_foot_ik_name)
+        c_pole_ik_pb = get_pose_bone(c_pole_ik_name)
+        toes_end_pb = get_pose_bone(toes_end_name)
+        toe_01_ik_pb = get_pose_bone(toe_01_ik_name)
+        toe_02_pb = get_pose_bone(toe_02_name)
+        toe_track_pb = get_pose_bone(toe_track_name)
+        heel_mid_pb = get_pose_bone(heel_mid_name)
+        heel_in_pb = get_pose_bone(heel_in_name)
+        heel_out_pb = get_pose_bone(heel_out_name)
+        c_foot_01_pb = get_pose_bone(c_foot_01_name)
+        c_foot_roll_cursor_pb = get_pose_bone(c_foot_roll_cursor_name)
+        c_thigh_fk_pb = get_pose_bone(c_thigh_fk_name)
+        c_calf_fk_pb = get_pose_bone(c_calf_fk_name)
+        c_foot_fk_pb = get_pose_bone(c_foot_fk_name)
+        c_toe_ik_pb = get_pose_bone(c_toe_ik_name)
+        c_toe_fk_pb = get_pose_bone(c_toe_fk_name)
+
+        if not (
+            calf_ik_pb
+            and foot_ik_pb
+            and c_foot_ik_pb
+            and c_pole_ik_pb
+            and toes_end_pb
+            and toe_01_ik_pb
+            and toe_02_pb
+            and toe_track_pb
+            and heel_mid_pb
+            and heel_in_pb
+            and heel_out_pb
+            and foot_pb
+            and thigh_pb
+            and calf_pb
+            and toe_pb
+            and c_foot_01_pb
+            and c_foot_roll_cursor_pb
+            and c_thigh_fk_pb
+            and c_calf_fk_pb
+            and c_foot_fk_pb
+            and c_toe_ik_pb
+            and c_toe_fk_pb
+        ):
+            continue
+
+        cns_name = "IK"
+        ik_cns = calf_ik_pb.constraints.get(cns_name)
+        if ik_cns is None:
+            ik_cns = calf_ik_pb.constraints.new("IK")
+            ik_cns.name = cns_name
+        ik_cns.target = rig
+        ik_cns.subtarget = foot_ik_target_name
+        ik_cns.pole_target = rig
+        ik_cns.pole_subtarget = c_pole_ik_name
+        try:
+            thigh_ik_pb = get_pose_bone(leg_rig_names["thigh_ik"] + _side)
+            if thigh_ik_pb is not None:
+                ik_cns.pole_angle = get_pole_angle(
+                    thigh_ik_pb,
+                    calf_ik_pb,
+                    c_pole_ik_pb.head,
+                )
+        except Exception:
+            pass
+        ik_cns.chain_count = 2
+        ik_cns.use_tail = True
+        ik_cns.use_stretch = False
+
+        calf_ik_pb.lock_ik_y = True
+        calf_ik_pb.lock_ik_z = True
+
+        cns_name = "Copy Location"
+        copy_loc_cns = foot_ik_pb.constraints.get(cns_name)
+        if copy_loc_cns is None:
+            copy_loc_cns = foot_ik_pb.constraints.new("COPY_LOCATION")
+            copy_loc_cns.name = cns_name
+        copy_loc_cns.target = rig
+        copy_loc_cns.subtarget = calf_ik_name
+        copy_loc_cns.head_tail = 1.0
+
+        cns_name = "TrackTo"
+        cns = foot_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = foot_ik_pb.constraints.new("TRACK_TO")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_01_name
+        cns.head_tail = 0.0
+        cns.track_axis = "TRACK_Y"
+        cns.up_axis = "UP_Z"
+        cns.use_target_z = True
+
+        cns_name = "Locked Track"
+        cns = foot_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = foot_ik_pb.constraints.new("LOCKED_TRACK")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = foot_01_pole_name
+        cns.head_tail = 0.0
+        cns.track_axis = "TRACK_Z"
+        cns.lock_axis = "LOCK_Y"
+
+        cns_name = "Copy Scale"
+        cns = foot_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = foot_ik_pb.constraints.new("COPY_SCALE")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_ik_name
+
+        cns_name = "Child Of"
+        cns = c_foot_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = c_foot_ik_pb.constraints.new("CHILD_OF")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_master_name
+
+        cns_name = "Child Of"
+        child_cns = c_pole_ik_pb.constraints.get(cns_name)
+        if child_cns is None:
+            child_cns = c_pole_ik_pb.constraints.new("CHILD_OF")
+            child_cns.name = cns_name
+        child_cns.target = rig
+        child_cns.subtarget = c_foot_ik_name
+
+        cns_power = 8
+
+        length_toes_end = toes_end_pb.length * cns_power
+
+        cns_name = "Transformation"
+        cns = toes_end_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = toes_end_pb.constraints.new("TRANSFORM")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_roll_cursor_name
+        cns.use_motion_extrapolate = True
+        cns.target_space = cns.owner_space = "LOCAL"
+        cns.map_from = "LOCATION"
+        cns.from_min_z = 0.5 * length_toes_end
+        cns.from_max_z = -0.5 * length_toes_end
+        cns.map_to = "ROTATION"
+        cns.map_to_x_from = "Z"
+        cns.map_to_z_from = "X"
+        cns.to_min_x_rot = -2.61
+        cns.to_max_x_rot = 2.61
+        cns.mix_mode_rot = "ADD"
+
+        cns_name = "Limit Rotation"
+        cns = toes_end_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = toes_end_pb.constraints.new("LIMIT_ROTATION")
+            cns.name = cns_name
+        cns.owner_space = "LOCAL"
+        cns.use_limit_x = True
+        cns.min_x = -2 * pi
+        cns.max_x = 0.0
+
+        cns_name = "Copy Transforms"
+        cns = toe_01_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = toe_01_ik_pb.constraints.new("COPY_TRANSFORMS")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_toe_ik_name
+        cns.mix_mode = "REPLACE"
+        cns.target_space = cns.owner_space = "WORLD"
+
+        cns_name_fk_rot = "FK_Rot_follow"
+        cns_fk_rot = toe_02_pb.constraints.get(cns_name_fk_rot)
+        if cns_fk_rot is None:
+            cns_fk_rot = toe_02_pb.constraints.new("COPY_ROTATION")
+            cns_fk_rot.name = cns_name_fk_rot
+        cns_fk_rot.target = rig
+        cns_fk_rot.subtarget = c_toe_ik_name
+        cns_fk_rot.mix_mode = "REPLACE"
+        cns_fk_rot.target_space = cns.owner_space = "WORLD"
+
+        cns_name = "TrackTo"
+        cns = toe_track_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = toe_track_pb.constraints.new("TRACK_TO")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = leg_rig_names["toes_end_01"] + _side
+        cns.head_tail = 0.0
+        cns.track_axis = "TRACK_Y"
+        cns.up_axis = "UP_Z"
+        cns.use_target_z = True
+
+        length_heel_mid = heel_mid_pb.length * cns_power
+
+        cns_name = "Transformation"
+        cns = heel_mid_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_mid_pb.constraints.new("TRANSFORM")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_roll_cursor_name
+        cns.owner_space = cns.target_space = "LOCAL"
+        cns.map_from = "LOCATION"
+        cns.from_min_z = -0.25 * length_heel_mid
+        cns.from_max_z = 0.25 * length_heel_mid
+        cns.map_to = "ROTATION"
+        cns.map_to_x_from = "Z"
+        cns.map_to_y_from = "X"
+        cns.map_to_z_from = "Y"
+        cns.to_min_x_rot = radians(100)
+        cns.to_max_x_rot = -radians(100)
+        cns.mix_mode_rot = "ADD"
+
+        cns_name = "Limit Rotation"
+        cns = heel_mid_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_mid_pb.constraints.new("LIMIT_ROTATION")
+            cns.name = cns_name
+        cns.use_limit_x = True
+        cns.min_x = radians(0)
+        cns.max_x = radians(360)
+        cns.owner_space = "LOCAL"
+
+        length_heel_in = heel_in_pb.length * cns_power
+
+        cns_name = "Transformation"
+        cns = heel_in_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_in_pb.constraints.new("TRANSFORM")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_roll_cursor_name
+        cns.owner_space = cns.target_space = "LOCAL"
+        cns.map_from = "LOCATION"
+        cns.from_min_x = -0.25 * length_heel_in
+        cns.from_max_x = 0.25 * length_heel_in
+        cns.map_to = "ROTATION"
+        cns.map_to_x_from = "Z"
+        cns.map_to_y_from = "X"
+        cns.map_to_z_from = "Y"
+        cns.to_min_y_rot = -radians(100)
+        cns.to_max_y_rot = radians(100)
+        cns.mix_mode_rot = "ADD"
+
+        cns_name = "Limit Rotation"
+        cns = heel_in_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_in_pb.constraints.new("LIMIT_ROTATION")
+            cns.name = cns_name
+        cns.use_limit_y = True
+        if side == "Left":
+            cns.min_y = 0.0
+            cns.max_y = radians(90)
+        else:
+            cns.min_y = radians(-90)
+            cns.max_y = 0.0
+        cns.owner_space = "LOCAL"
+
+        length_heel_out = heel_out_pb.length * cns_power
+
+        cns_name = "Transformation"
+        cns = heel_out_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_out_pb.constraints.new("TRANSFORM")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_foot_roll_cursor_name
+        cns.owner_space = cns.target_space = "LOCAL"
+        cns.map_from = "LOCATION"
+        cns.from_min_x = -0.25 * length_heel_out
+        cns.from_max_x = 0.25 * length_heel_out
+        cns.map_to = "ROTATION"
+        cns.map_to_x_from = "Z"
+        cns.map_to_y_from = "X"
+        cns.map_to_z_from = "Y"
+        cns.to_min_y_rot = -radians(100)
+        cns.to_max_y_rot = radians(100)
+        cns.mix_mode_rot = "ADD"
+
+        cns_name = "Limit Rotation"
+        cns = heel_out_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = heel_out_pb.constraints.new("LIMIT_ROTATION")
+            cns.name = cns_name
+        cns.use_limit_y = True
+        if side == "Left":
+            cns.min_y = radians(-90)
+            cns.max_y = 0.0
+        else:
+            cns.min_y = 0.0
+            cns.max_y = radians(90)
+        cns.owner_space = "LOCAL"
+
+        if "ik_fk_switch" not in c_foot_ik_pb.keys():
+            create_custom_prop(
+                node=c_foot_ik_pb,
+                prop_name="ik_fk_switch",
+                prop_val=0.0,
+                prop_min=0.0,
+                prop_max=1.0,
+                prop_description="IK-FK switch value",
+            )
+
+        cns_name = "IK_follow"
+        cns_ik = thigh_pb.constraints.get(cns_name)
+        if cns_ik is None:
+            cns_ik = thigh_pb.constraints.new("COPY_TRANSFORMS")
+            cns_ik.name = cns_name
+        cns_ik.target = rig
+        cns_ik.subtarget = leg_rig_names["thigh_ik"] + _side
+        cns_ik.influence = 1.0
+
+        cns_name = "FK_follow"
+        cns_fk = thigh_pb.constraints.get(cns_name)
+        if cns_fk is None:
+            cns_fk = thigh_pb.constraints.new("COPY_TRANSFORMS")
+            cns_fk.name = cns_name
+        cns_fk.target = rig
+        cns_fk.subtarget = c_thigh_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + thigh_name
+            + '"].constraints["'
+            + cns_name
+            + '"].influence',
+            'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        cns_name = "IK_follow"
+        cns_ik = calf_pb.constraints.get(cns_name)
+        if cns_ik is None:
+            cns_ik = calf_pb.constraints.new("COPY_TRANSFORMS")
+            cns_ik.name = cns_name
+        cns_ik.target = rig
+        cns_ik.subtarget = calf_ik_name
+        cns_ik.influence = 1.0
+
+        cns_name = "FK_follow"
+        cns_fk = calf_pb.constraints.get(cns_name)
+        if cns_fk is None:
+            cns_fk = calf_pb.constraints.new("COPY_TRANSFORMS")
+            cns_fk.name = cns_name
+        cns_fk.target = rig
+        cns_fk.subtarget = c_calf_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            f'pose.bones["{calf_name}"].constraints["{cns_name}"].influence',
+            'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        cns_name = "IK_follow"
+        cns_ik = foot_pb.constraints.get(cns_name)
+        if cns_ik is None:
+            cns_ik = foot_pb.constraints.new("COPY_TRANSFORMS")
+            cns_ik.name = cns_name
+        cns_ik.target = rig
+        cns_ik.subtarget = foot_ik_name
+        cns_ik.influence = 1.0
+
+        cns_name = "FK_follow"
+        cns_fk = foot_pb.constraints.get(cns_name)
+        if cns_fk is None:
+            cns_fk = foot_pb.constraints.new("COPY_TRANSFORMS")
+            cns_fk.name = cns_name
+        cns_fk.target = rig
+        cns_fk.subtarget = foot_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            f'pose.bones["{foot_name}"].constraints["{cns_name}"].influence',
+            'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        cns_name = "IK_Rot_follow"
+        cns_ik_rot = toe_pb.constraints.get(cns_name)
+        if cns_ik_rot is None:
+            cns_ik_rot = toe_pb.constraints.new("COPY_ROTATION")
+            cns_ik_rot.name = cns_name
+        cns_ik_rot.target = rig
+        cns_ik_rot.subtarget = c_toe_ik_name
+        cns_ik_rot.influence = 1.0
+
+        cns_name = "IK_Scale_follow"
+        cns_ik_scale = toe_pb.constraints.get(cns_name)
+        if cns_ik_scale is None:
+            cns_ik_scale = toe_pb.constraints.new("COPY_SCALE")
+            cns_ik_scale.name = cns_name
+        cns_ik_scale.target = rig
+        cns_ik_scale.subtarget = c_toe_ik_name
+        cns_ik_scale.influence = 1.0
+
+        cns_name_fk_rot = "FK_Rot_follow"
+        cns_fk_rot = toe_pb.constraints.get(cns_name_fk_rot)
+        if cns_fk_rot is None:
+            cns_fk_rot = toe_pb.constraints.new("COPY_ROTATION")
+            cns_fk_rot.name = cns_name_fk_rot
+        cns_fk_rot.target = rig
+        cns_fk_rot.subtarget = c_toe_fk_name
+        cns_fk_rot.influence = 1.0
+
+        cns_name_fk_scale = "FK_Scale_follow"
+        cns_fk_scale = toe_pb.constraints.get(cns_name_fk_scale)
+        if cns_fk_scale is None:
+            cns_fk_scale = toe_pb.constraints.new("COPY_SCALE")
+            cns_fk_scale.name = cns_name_fk_scale
+        cns_fk_scale.target = rig
+        cns_fk_scale.subtarget = c_toe_fk_name
+        cns_fk_scale.influence = 1.0
+
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + toe_name
+            + '"].constraints["'
+            + cns_name_fk_rot
+            + '"].influence',
+            'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + toe_name
+            + '"].constraints["'
+            + cns_name_fk_scale
+            + '"].influence',
+            'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        lock_pbone_transform(c_foot_roll_cursor_pb, "location", [1])
+        lock_pbone_transform(c_foot_roll_cursor_pb, "rotation", [0, 1, 2])
+        lock_pbone_transform(c_foot_roll_cursor_pb, "scale", [0, 1, 2])
+
+        lock_pbone_transform(c_foot_01_pb, "location", [0, 1, 2])
+        lock_pbone_transform(c_foot_01_pb, "rotation", [1, 2])
+        lock_pbone_transform(c_foot_01_pb, "scale", [0, 1, 2])
+
+        lock_pbone_transform(c_foot_fk_pb, "location", [0, 1, 2])
+
+        lock_pbone_transform(c_pole_ik_pb, "rotation", [0, 1, 2])
+        lock_pbone_transform(c_pole_ik_pb, "scale", [0, 1, 2])
+
+        lock_pbone_transform(c_thigh_fk_pb, "location", [0, 1, 2])
+        lock_pbone_transform(c_calf_fk_pb, "location", [0, 1, 2])
+
+        c_pbones_list = [
+            c_foot_ik_pb,
+            c_pole_ik_pb,
+            c_foot_01_pb,
+            c_foot_roll_cursor_pb,
+            c_thigh_fk_pb,
+            c_calf_fk_pb,
+            c_foot_fk_pb,
+            c_toe_fk_pb,
+            c_toe_ik_pb,
+        ]
+
+        for pb in c_pbones_list:
+            pb.bone["mixamo_ctrl"] = 1
+
+        set_bone_custom_shape(c_thigh_fk_pb, "cs_thigh_fk")
+        set_bone_custom_shape(c_calf_fk_pb, "cs_calf_fk")
+        set_bone_custom_shape(c_foot_ik_pb, "cs_foot")
+        set_bone_custom_shape(c_foot_fk_pb, "cs_foot")
+        set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
+        set_bone_custom_shape(c_foot_roll_cursor_pb, "cs_foot_roll")
+        set_bone_custom_shape(c_foot_01_pb, "cs_foot_01")
+        set_bone_custom_shape(c_toe_fk_pb, "cs_toe")
+        set_bone_custom_shape(c_toe_ik_pb, "cs_toe")
+
+        ik_controls_names = [
+            c_foot_ik_name,
+            c_foot_01_name,
+            c_toe_ik_name,
+            c_foot_roll_cursor_name,
+            c_pole_ik_name,
+        ]
+
+        arr_ids = [-1]
+        if blender_version._float >= 300:
+            arr_ids = [0, 1, 2]
+
+        for n in ik_controls_names:
+            dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
+            tar_dp = 'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]'
+            for arr_id in arr_ids:
+                add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="1-var")
+
+        fk_controls_names = [
+            c_foot_fk_name,
+            c_thigh_fk_name,
+            c_calf_fk_name,
+            c_toe_fk_name,
+        ]
+
+        for n in fk_controls_names:
+            dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
+            tar_dp = 'pose.bones["' + c_foot_ik_name + '"]["ik_fk_switch"]'
+            for arr_id in arr_ids:
+                add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="var")
+
+        for pb in c_pbones_list:
+            pb.rotation_mode = "XYZ"
+            set_bone_color_group(rig, pb, "body" + _side.lower())
+
+    for side in ["Left", "Right"]:
+        _side = "_" + side
+
+        shoulder_name = get_src_bone_name(side + arm_names["shoulder"])
+        arm_name = get_src_bone_name(side + arm_names["arm"])
+        forearm_name = get_src_bone_name(side + arm_names["forearm"])
+        hand_name = get_src_bone_name(side + arm_names["hand"])
+
+        c_shoulder_name = c_prefix + arm_rig_names["shoulder"] + _side
+        arm_ik_name = arm_rig_names["arm_ik"] + _side
+        forearm_ik_name = arm_rig_names["forearm_ik"] + _side
+        c_arm_fk_name = c_prefix + arm_rig_names["arm_fk"] + _side
+        c_forearm_fk_name = c_prefix + arm_rig_names["forearm_fk"] + _side
+        c_pole_ik_name = c_prefix + arm_rig_names["pole_ik"] + _side
+        c_hand_ik_name = c_prefix + arm_rig_names["hand_ik"] + _side
+        c_hand_fk_name = c_prefix + arm_rig_names["hand_fk"] + _side
+
+        c_shoulder_pb = get_pose_bone(c_shoulder_name)
+        shoulder_pb = get_pose_bone(shoulder_name)
+        c_arm_fk_pb = get_pose_bone(c_arm_fk_name)
+        forearm_ik_pb = get_pose_bone(forearm_ik_name)
+        c_pole_ik_pb = get_pose_bone(c_pole_ik_name)
+        c_hand_ik_pb = get_pose_bone(c_hand_ik_name)
+        hand_pb = get_pose_bone(hand_name)
+        arm_pb = get_pose_bone(arm_name)
+        forearm_pb = get_pose_bone(forearm_name)
+        c_forearm_fk_pb = get_pose_bone(c_forearm_fk_name)
+        c_hand_fk_pb = get_pose_bone(c_hand_fk_name)
+
+        if not (
+            c_shoulder_pb
+            and shoulder_pb
+            and c_arm_fk_pb
+            and forearm_ik_pb
+            and c_pole_ik_pb
+            and c_hand_ik_pb
+            and hand_pb
+            and arm_pb
+            and forearm_pb
+            and c_forearm_fk_pb
+            and c_hand_fk_pb
+        ):
+            continue
+
+        cns_name = "Copy Location"
+        cns = c_arm_fk_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = c_arm_fk_pb.constraints.new("COPY_LOCATION")
+            cns.name = cns_name
+        cns.head_tail = 1.0
+        cns.target = rig
+        cns.subtarget = c_shoulder_name
+
+        cns_name = "IK"
+        ik_cns = forearm_ik_pb.constraints.get(cns_name)
+        if ik_cns is None:
+            ik_cns = forearm_ik_pb.constraints.new("IK")
+            ik_cns.name = cns_name
+        ik_cns.target = rig
+        ik_cns.subtarget = c_hand_ik_name
+        ik_cns.pole_target = rig
+        ik_cns.pole_subtarget = c_pole_ik_name
+        ik_cns.pole_angle = 0.0
+        if side == "Right":
+            ik_cns.pole_angle = radians(180)
+        ik_cns.chain_count = 2
+        ik_cns.use_tail = True
+        ik_cns.use_stretch = False
+
+        forearm_ik_pb.lock_ik_y = True
+        forearm_ik_pb.lock_ik_x = True
+
+        cns_name = "Child Of"
+        cns = c_pole_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = c_pole_ik_pb.constraints.new("CHILD_OF")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_prefix + spine_rig_names["pelvis"]
+
+        cns_name = "Child Of"
+        cns = c_hand_ik_pb.constraints.get(cns_name)
+        if cns is None:
+            cns = c_hand_ik_pb.constraints.new("CHILD_OF")
+            cns.name = cns_name
+        cns.target = rig
+        cns.subtarget = c_master_name
+
+        fingers_names = []
+        c_fingers_names = []
+        for fname in fingers_type:
+            for i in range(1, 4):
+                finger_name = get_mix_name(
+                    side + "Hand" + fname + str(i), True
+                )
+                finger_pb = get_pose_bone(finger_name)
+                if finger_pb is None:
+                    continue
+                fingers_names.append(finger_name)
+                c_finger_name = c_prefix + fname + str(i) + _side
+                c_fingers_names.append(c_finger_name)
+                c_finger_pb = get_pose_bone(c_finger_name)
+                if c_finger_pb is None:
+                    continue
+                add_copy_transf(finger_pb, rig, c_finger_pb.name)
+
+        if shoulder_pb and c_shoulder_pb:
+            add_copy_transf(shoulder_pb, rig, c_shoulder_name)
+
+        if "ik_fk_switch" not in c_hand_ik_pb.keys():
+            create_custom_prop(
+                node=c_hand_ik_pb,
+                prop_name="ik_fk_switch",
+                prop_val=0.0,
+                prop_min=0.0,
+                prop_max=1.0,
+                prop_description="IK-FK switch value",
+            )
+
+        cns_ik_name = "IK_follow"
+        cns_ik = arm_pb.constraints.get(cns_ik_name)
+        if cns_ik is None:
+            cns_ik = arm_pb.constraints.new("COPY_TRANSFORMS")
+            cns_ik.name = cns_ik_name
+        cns_ik.target = rig
+        cns_ik.subtarget = arm_ik_name
+        cns_ik.influence = 1.0
+
+        cns_fk_name = "FK_Follow"
+        cns_fk = arm_pb.constraints.get(cns_fk_name)
+        if cns_fk is None:
+            cns_fk = arm_pb.constraints.new("COPY_TRANSFORMS")
+            cns_fk.name = cns_fk_name
+        cns_fk.target = rig
+        cns_fk.subtarget = c_arm_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + arm_name
+            + '"].constraints["'
+            + cns_fk_name
+            + '"].influence',
+            'pose.bones["' + c_hand_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        cns_ik_name = "IK_follow"
+        cns_ik = forearm_pb.constraints.get(cns_ik_name)
+        if cns_ik is None:
+            cns_ik = forearm_pb.constraints.new("COPY_TRANSFORMS")
+            cns_ik.name = cns_ik_name
+        cns_ik.target = rig
+        cns_ik.subtarget = forearm_ik_name
+        cns_ik.influence = 1.0
+
+        cns_fk_name = "FK_Follow"
+        cns_fk = forearm_pb.constraints.get(cns_fk_name)
+        if cns_fk is None:
+            cns_fk = forearm_pb.constraints.new("COPY_TRANSFORMS")
+            cns_fk.name = cns_fk_name
+        cns_fk.target = rig
+        cns_fk.subtarget = c_forearm_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + forearm_name
+            + '"].constraints["'
+            + cns_fk_name
+            + '"].influence',
+            'pose.bones["' + c_hand_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        lock_pbone_transform(c_forearm_fk_pb, "location", [0, 1, 2])
+
+        cns_ik_name = "IK_follow"
+        cns_ik = hand_pb.constraints.get(cns_ik_name)
+        if cns_ik is None:
+            cns_ik = hand_pb.constraints.new("COPY_ROTATION")
+            cns_ik.name = cns_ik_name
+        cns_ik.target = rig
+        cns_ik.subtarget = c_hand_ik_name
+        cns_ik.influence = 1.0
+
+        cns_fk_name = "FK_Follow"
+        cns_fk = hand_pb.constraints.get(cns_fk_name)
+        if cns_fk is None:
+            cns_fk = hand_pb.constraints.new("COPY_ROTATION")
+            cns_fk.name = cns_fk_name
+        cns_fk.target = rig
+        cns_fk.subtarget = c_hand_fk_name
+        cns_fk.influence = 0.0
+
+        add_driver_to_prop(
+            rig,
+            'pose.bones["'
+            + hand_name
+            + '"].constraints["'
+            + cns_fk_name
+            + '"].influence',
+            'pose.bones["' + c_hand_ik_name + '"]["ik_fk_switch"]',
+            array_idx=-1,
+            exp="var",
+        )
+
+        lock_pbone_transform(c_hand_fk_pb, "location", [0, 1, 2])
+
+        set_bone_custom_shape(
+            c_shoulder_pb, "cs_shoulder_" + side.lower()
+        )
+        set_bone_custom_shape(c_arm_fk_pb, "cs_arm_fk")
+        set_bone_custom_shape(c_forearm_fk_pb, "cs_forearm_fk")
+        set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
+        set_bone_custom_shape(c_hand_fk_pb, "cs_circle")
+        set_bone_custom_shape(c_hand_ik_pb, "cs_circle")
+
+        c_fingers_pb = []
+        for fname in fingers_type:
+            for i in range(1, 4):
+                c_finger_name = c_prefix + fname + str(i) + _side
+                finger_pb = get_pose_bone(c_finger_name)
+                if finger_pb is None:
+                    continue
+                c_fingers_pb.append(finger_pb)
+                set_bone_custom_shape(finger_pb, "cs_circle_025")
+
+        c_pbones_list = [
+            c_shoulder_pb,
+            c_arm_fk_pb,
+            c_forearm_fk_pb,
+            c_pole_ik_pb,
+            c_hand_fk_pb,
+            c_hand_ik_pb,
+        ] + c_fingers_pb
+
+        for pb in c_pbones_list:
+            pb.bone["mixamo_ctrl"] = 1
+
+        ik_controls_names = [c_pole_ik_name, c_hand_ik_name]
+
+        arr_ids = [-1]
+        if blender_version._float >= 300:
+            arr_ids = [0, 1, 2]
+
+        for n in ik_controls_names:
+            dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
+            tar_dp = 'pose.bones["' + c_hand_ik_name + '"]["ik_fk_switch"]'
+            for arr_id in arr_ids:
+                add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="1-var")
+
+        fk_controls_names = [
+            c_arm_fk_name,
+            c_forearm_fk_name,
+            c_hand_fk_name,
+        ]
+
+        for n in fk_controls_names:
+            dr_dp = 'pose.bones["' + n + '"].' + get_custom_shape_scale_prop_name()
+            tar_dp = 'pose.bones["' + c_hand_ik_name + '"]["ik_fk_switch"]'
+            for arr_id in arr_ids:
+                add_driver_to_prop(rig, dr_dp, tar_dp, array_idx=arr_id, exp="var")
+
+        for pb in c_pbones_list:
+            pb.rotation_mode = "XYZ"
+            set_bone_color_group(rig, pb, "body" + _side.lower())
+
+    coll_ctrl_name = "CTRL"
+    ctrl_collection = rig.data.collections.get(coll_ctrl_name)
+    if ctrl_collection:
+        for bone in ctrl_collection.bones:
+            pose_bone = rig.pose.bones.get(bone.name)
+            if pose_bone:
+                pose_bone.custom_shape_wire_width = 3.0
+
+    rig.show_in_front = False
 
 def _update(self, context):
     if blender_version._float >= 300:
@@ -3234,6 +4250,7 @@ class MR_PT_MenuRig(Panel, MixamoRigPanel):  # noqa: N801
 
         if context.mode != "EDIT_MESH":
             col.operator(MR_OT_edit_custom_shape.bl_idname, text="Edit Control Shape")
+            col.operator(MR_OT_reconnect_rig.bl_idname, text="Reconnect Rig")
         else:
             col.operator(MR_OT_apply_shape.bl_idname, text="Apply Control Shape")
 
@@ -3299,6 +4316,7 @@ classes = (
     MR_OT_zero_out,
     MR_OT_bake_anim,
     MR_OT_import_anim,
+    MR_OT_reconnect_rig,
     MR_OT_edit_custom_shape,
     MR_OT_apply_shape,
     MR_OT_exportGLTF,
