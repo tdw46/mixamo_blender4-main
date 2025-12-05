@@ -8,7 +8,7 @@ echo ========================================
 echo.
 
 REM Set the Blender executable path
-set BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 4.5\blender.exe
+set BLENDER_PATH=C:\Program Files\Blender Foundation\Blender 5.0\blender.exe
 
 REM Set the extension directory (current directory)
 set EXTENSION_DIR=%~dp0
