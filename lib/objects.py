@@ -34,15 +34,45 @@ def delete_object(obj):
             print(f"Error deleting object: {e}")
 
 
-def duplicate_object():
-    try:
-        bpy.ops.object.duplicate(linked=False, mode="TRANSLATION")
-    except Exception as e:
-        print(f"Error duplicating object: {e}")
-        try:
-            bpy.ops.object.duplicate("TRANSLATION", False)
-        except Exception as e:
-            print(f"Error duplicating object (fallback): {e}")
+def duplicate_object(obj=None):
+    """
+    Duplicate an object using direct data-block copy instead of bpy.ops.
+
+    Args:
+        obj: The object to duplicate. If None, uses context.active_object.
+
+    Returns:
+        The duplicated object, which is also set as the active selected object.
+    """
+    if obj is None:
+        obj = bpy.context.active_object
+
+    if obj is None:
+        print("Error duplicating object: No object provided or active")
+        return None
+
+    # Create a copy of the object
+    new_obj = obj.copy()
+
+    # Copy the object data (mesh, armature, etc.) if it exists
+    if obj.data is not None:
+        new_obj.data = obj.data.copy()
+
+    # Link the new object to the same collections as the original
+    for collection in obj.users_collection:
+        collection.objects.link(new_obj)
+
+    # If not linked to any collection, link to scene collection
+    if not new_obj.users_collection:
+        bpy.context.scene.collection.objects.link(new_obj)
+
+    # Deselect all and set the new object as active and selected
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    new_obj.select_set(True)
+    bpy.context.view_layer.objects.active = new_obj
+
+    return new_obj
 
 
 def get_object(name):
@@ -114,8 +144,6 @@ def append_cs(names=None):
                 for i in obj.users_collection:
                     if i not in assigned_collections:
                         i.objects.unlink(obj)
-                # and the scene collection
-                try:
+                # and the scene collection (if still linked there)
+                if obj.name in scene.collection.objects:
                     scene.collection.objects.unlink(obj)
-                except Exception as e:
-                    print(f"Error removing object from scene collection: {e}")

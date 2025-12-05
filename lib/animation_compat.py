@@ -13,15 +13,16 @@ def has_slotted_actions():
     return bpy.app.version >= (4, 4, 0)
 
 
-def get_action_fcurves(action):
+def get_action_fcurves(action, slot=None):
     """
-    Get F-Curves from an action, compatible with both legacy and slotted actions.
+    Get F-Curves from an action, compatible with legacy, slotted, and layered actions.
 
     IMPORTANT: Call this ONCE and store the result if you need to use it multiple times
     in a loop. Repeated calls can cause dependency graph issues in Blender 4.4+.
 
     Args:
         action: bpy.types.Action
+        slot: Optional slot for Blender 5.0+ layered actions. If None, uses first slot.
 
     Returns:
         Collection of F-Curves (or empty list if none exist)
@@ -29,20 +30,44 @@ def get_action_fcurves(action):
     Example:
         # GOOD - call once, use many times
         fcurves = get_action_fcurves(action)
-        for i in range(3):
-            fc = fcurves.new("location", index=i)
+        for fc in fcurves:
+            print(fc.data_path)
 
         # BAD - repeated calls in loop
         for i in range(3):
             fcurves = get_action_fcurves(action)  # DON'T DO THIS
-            fc = fcurves.new("location", index=i)
     """
     if action is None:
         return []
 
-    # Legacy API works in both old and new Blender
-    # In 4.4+, action.fcurves is a proxy for action.layers[0].strips[0].channelbag(action.slots[0]).fcurves  # noqa: E501
-    return action.fcurves
+    # Blender 5.0+: action.fcurves is removed, use layered action API
+    if bpy.app.version >= (5, 0, 0):
+        # Use the new layered action system
+        if hasattr(action, "layers") and len(action.layers) > 0:
+            layer = action.layers[0]
+            if hasattr(layer, "strips") and len(layer.strips) > 0:
+                strip = layer.strips[0]
+                if hasattr(strip, "channelbag"):
+                    # Get the slot to use
+                    if slot is None:
+                        if hasattr(action, "slots") and len(action.slots) > 0:
+                            slot = action.slots[0]
+                    if slot is not None:
+                        try:
+                            channelbag = strip.channelbag(slot)
+                            cbag_has_fc = hasattr(channelbag, "fcurves")
+                            if channelbag is not None and cbag_has_fc:
+                                return channelbag.fcurves
+                        except Exception:
+                            pass
+        return []
+
+    # Blender 4.4+: action.fcurves is a proxy for the layered system
+    # Blender < 4.4: action.fcurves is the direct access
+    if hasattr(action, "fcurves"):
+        return action.fcurves
+
+    return []
 
 
 def get_action_frame_range(action):
@@ -243,7 +268,7 @@ def duplicate_action_assignment(src_anim_data, dst_anim_data):
 def ensure_fcurve_exists(action, datablock, data_path, index=0):
     """
     Ensure an F-Curve exists on an action for a specific data-block property.
-    Compatible with both legacy and slotted actions.
+    Compatible with legacy, slotted, and layered actions.
 
     Args:
         action: bpy.types.Action
@@ -264,12 +289,31 @@ def ensure_fcurve_exists(action, datablock, data_path, index=0):
         except Exception:
             pass
 
-    # Fallback to legacy API (works in both versions)
-    fcurve = action.fcurves.find(data_path, index=index)
-    if fcurve is None:
-        fcurve = action.fcurves.new(data_path, index=index)
+    # Blender 5.0+: action.fcurves is removed, use layered action API
+    if bpy.app.version >= (5, 0, 0):
+        # Get fcurves collection from layered action
+        fcurves = get_action_fcurves(action)
+        if fcurves:
+            # Try to find existing fcurve
+            for fc in fcurves:
+                if fc.data_path == data_path and fc.array_index == index:
+                    return fc
+            # Create new fcurve if collection supports it
+            if hasattr(fcurves, "new"):
+                try:
+                    return fcurves.new(data_path, index=index)
+                except Exception:
+                    pass
+        return None
 
-    return fcurve
+    # Fallback to legacy API (Blender < 5.0)
+    if hasattr(action, "fcurves"):
+        fcurve = action.fcurves.find(data_path, index=index)
+        if fcurve is None:
+            fcurve = action.fcurves.new(data_path, index=index)
+        return fcurve
+
+    return None
 
 
 def print_action_info(action, verbose=False):

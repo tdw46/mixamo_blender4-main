@@ -9,7 +9,7 @@ type = "add-on"
 
 website = "https://github.com/tdw46/mixamo_blender4-main/tree/main"
 
-tags = ["Import-Export", "Animation", "Modeling"]
+tags = ["Import-Export", "Rigging"]
 
 blender_version_min = "4.2.0"
 blender_version_max = "5.5.999"

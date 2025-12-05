@@ -71,6 +71,28 @@ from .lib.version import (
 
 # UTILITY FUNCTIONS
 ####################
+def _deselect_all_objects():
+    """
+    Safely deselect all objects, handling context issues.
+    Falls back to manual deselection if operator fails.
+    """
+    try:
+        # Try to ensure OBJECT mode first if we have an active object
+        if bpy.context.active_object and bpy.context.active_object.mode != "OBJECT":
+            try:
+                bpy.ops.object.mode_set(mode="OBJECT")
+            except Exception:
+                pass
+        bpy.ops.object.select_all(action="DESELECT")
+    except Exception:
+        # Fallback: manually deselect all objects
+        for obj in bpy.context.view_layer.objects:
+            try:
+                obj.select_set(False)
+            except Exception:
+                pass
+
+
 def search_layer_collection(layer_collection, collection_name):
     """Recursively search for a layer collection by name."""
     if layer_collection.name == collection_name:
@@ -84,17 +106,6 @@ def search_layer_collection(layer_collection, collection_name):
 
 # OPERATOR CLASSES
 ##################
-def _safe_deselect_all():
-    try:
-        bpy.ops.object.select_all(action="DESELECT")
-    except Exception:
-        for ob in bpy.context.view_layer.objects:
-            try:
-                ob.select_set(False)
-            except Exception:
-                pass
-
-
 class MR_OT_update(bpy.types.Operator):  # noqa: N801
     """Update old control rig to Blender 3.0"""
 
@@ -302,18 +313,13 @@ class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
             # Switch to OBJECT mode IMMEDIATELY as first operation
             if original_mode != "OBJECT":
                 try:
-                    if original_mode == "EDIT":
-                        bpy.ops.object.editmode_toggle()
-                    elif original_mode == "POSE":
-                        bpy.ops.object.posemode_toggle()
-                    else:
-                        bpy.ops.object.mode_set(mode="OBJECT")
+                    bpy.ops.object.mode_set(mode="OBJECT")
                 except Exception as e:
                     self.report({"ERROR"}, f"Could not switch to OBJECT mode: {e}")
                     return {"CANCELLED"}
 
             arm = get_object(context.active_object.name)
-            _safe_deselect_all()
+            _deselect_all_objects()
             set_active_object(arm.name)
 
             # enable all armature layers
@@ -332,7 +338,7 @@ class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
                     self.animated_armature["mix_to_del"] = True
 
                     bpy.ops.object.mode_set(mode="OBJECT")
-                    _safe_deselect_all()
+                    _deselect_all_objects()
                     set_active_object(arm.name)
 
             # set to rest pose, clear animation
@@ -361,7 +367,7 @@ class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
 
         finally:
             bpy.ops.object.mode_set(mode="OBJECT")
-            _safe_deselect_all()
+            _deselect_all_objects()
             set_active_object(arm.name)
 
             if not debug:
@@ -474,7 +480,7 @@ class MR_OT_import_anim(bpy.types.Operator):  # noqa: N801
             if not debug:
                 # Ensure the control rig is active before restoring layers
                 try:
-                    _safe_deselect_all()
+                    _deselect_all_objects()
                     if "tar_arm" in locals() and tar_arm:
                         set_active_object(tar_arm.name)
                 except Exception:
@@ -577,7 +583,7 @@ def _edit_custom_shape():
     cs = bone.custom_shape
     cs_mesh = cs.data
 
-    bpy.ops.object.posemode_toggle()
+    bpy.ops.object.mode_set(mode="OBJECT")
 
     # make sure the active collection is not hidden,
     # otherwise we can't access the newly created object data
@@ -656,7 +662,7 @@ def clean_scene():
 
 def init_armature_transforms(rig):
     bpy.ops.object.mode_set(mode="OBJECT")
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(rig.name)
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -780,13 +786,7 @@ def _build_constraints_for_rig(rig):
         cns.target = rig
         cns.subtarget = hips_free_h_name
 
-    if (
-        c_hips_pb
-        and c_hips_free_pb
-        and c_spine_pb
-        and c_spine1_pb
-        and c_spine2_pb
-    ):
+    if c_hips_pb and c_hips_free_pb and c_spine_pb and c_spine1_pb and c_spine2_pb:
         for pb in [c_hips_pb, c_hips_free_pb, c_spine_pb, c_spine1_pb, c_spine2_pb]:
             pb.bone["mixamo_ctrl"] = 1
 
@@ -1505,9 +1505,7 @@ def _build_constraints_for_rig(rig):
         c_fingers_names = []
         for fname in fingers_type:
             for i in range(1, 4):
-                finger_name = get_mix_name(
-                    side + "Hand" + fname + str(i), True
-                )
+                finger_name = get_mix_name(side + "Hand" + fname + str(i), True)
                 finger_pb = get_pose_bone(finger_name)
                 if finger_pb is None:
                     continue
@@ -1626,9 +1624,7 @@ def _build_constraints_for_rig(rig):
 
         lock_pbone_transform(c_hand_fk_pb, "location", [0, 1, 2])
 
-        set_bone_custom_shape(
-            c_shoulder_pb, "cs_shoulder_" + side.lower()
-        )
+        set_bone_custom_shape(c_shoulder_pb, "cs_shoulder_" + side.lower())
         set_bone_custom_shape(c_arm_fk_pb, "cs_arm_fk")
         set_bone_custom_shape(c_forearm_fk_pb, "cs_forearm_fk")
         set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
@@ -1694,6 +1690,7 @@ def _build_constraints_for_rig(rig):
                 pose_bone.custom_shape_wire_width = 3.0
 
     rig.show_in_front = False
+
 
 def _update(self, context):
     if blender_version._float >= 300:
@@ -3511,7 +3508,7 @@ def _bake_anim(self, context):
     for pbone in rig.pose.bones:
         if "mixamo_ctrl" in pbone.bone.keys():
             rig.data.bones.active = pbone.bone
-            pbone.bone.select = True
+            pbone.select = True
             found_ctrl = True
 
     if not found_ctrl:  # backward compatibility, use layer 0 instead
@@ -3522,12 +3519,12 @@ def _bake_anim(self, context):
                 pb = rig.pose.bones.get(b.name)
                 if pb is not None:
                     rig.data.bones.active = pb.bone
-                    pb.bone.select = True
+                    pb.select = True
 
         # ~ for pbone in rig.pose.bones:
         # ~ if pbone.bone.layers[0]:
         # ~ rig.data.bones.active = pbone.bone
-        # ~ pbone.bone.select = True
+        # ~ pbone.select = True
 
     fs, fe = int(fs), int(fe)
 
@@ -3573,7 +3570,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     src_arm.location = [0, 0, 0]
 
     # Duplicate source armature to preserve animation
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
@@ -3611,7 +3608,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
     """
 
     # Store target bones rest transforms
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(tar_arm.name)
     try:
         bpy.ops.object.mode_set(mode="EDIT")
@@ -3633,7 +3630,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
 
     # Apply target rest pose to the ORIGINAL src_arm (like 3.6 version)
     print("  Set rest pose...")
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
     try:
         bpy.ops.object.mode_set(mode="EDIT")
@@ -3659,7 +3656,7 @@ def redefine_source_rest_pose(src_arm, tar_arm):
         )
 
     # Add constraints to src_arm to follow duplicate's animation
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
     try:
         bpy.ops.object.mode_set(mode="POSE")
@@ -3731,7 +3728,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         return
 
     # CRITICAL FIX: Work on a duplicate, then reassign src_arm like 3.6 does
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
 
     # Detect if source armature uses mixamorig: prefix
@@ -3800,7 +3797,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     fr_end = int(frame_range[1])
 
     # Ensure target is active for bone data collection
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(tar_arm.name)
     try:
         bpy.ops.object.mode_set(mode="OBJECT")
@@ -3945,7 +3942,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             ik_bones_data[b] = type, side, ik_bones
 
     # Init source armature rotation and scale
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
 
     try:
@@ -3974,7 +3971,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
                 k.co[1] *= scale_fac
 
     # CRITICAL: Re-establish src_arm as active in EDIT mode for helper bone creation
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(src_arm.name)
     bpy.context.view_layer.update()
 
@@ -4050,7 +4047,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         cns.subtarget = chain[1]
 
     # Retarget - Method 2: Constrained retargetting
-    _safe_deselect_all()
+    _deselect_all_objects()
     set_active_object(tar_arm.name)
 
     try:
@@ -4120,11 +4117,11 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
             ik_pole_ctrl = get_pose_bone(ik_pole_name)
             tar_arm.data.bones.active = ik_pole_ctrl.bone
-            ik_pole_ctrl.bone.select = True
+            ik_pole_ctrl.select = True
 
         # select
         tar_arm.data.bones.active = tar_bone.bone
-        tar_bone.bone.select = True
+        tar_bone.select = True
 
     bpy.context.view_layer.update()
 
@@ -4141,7 +4138,7 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
     # Cleanup
     try:
-        _safe_deselect_all()
+        _deselect_all_objects()
         set_active_object(tar_arm.name)
         bpy.ops.object.mode_set(mode="OBJECT")
     except Exception:

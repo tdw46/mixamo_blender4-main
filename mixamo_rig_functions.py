@@ -698,9 +698,9 @@ def fk_to_ik_arm(self):  # noqa: F841
         pole.keyframe_insert(data_path="location")
 
     # change FK to IK hand selection, if selected
-    if hand_ik.bone.select:
-        hand_fk.bone.select = True
-        hand_ik.bone.select = False
+    if hand_ik.select:
+        hand_fk.select = True
+        hand_ik.select = False
 
 
 def bake_ik_to_fk_arm(self):
@@ -794,9 +794,9 @@ def ik_to_fk_arm(self):
         forearm_fk.keyframe_insert(data_path="rotation_euler")
 
     # change FK to IK hand selection, if selected
-    if hand_fk.bone.select:
-        hand_fk.bone.select = False
-        hand_ik.bone.select = True
+    if hand_fk.select:
+        hand_fk.select = False
+        hand_ik.select = True
 
 
 def bake_fk_to_ik_leg(self):
@@ -877,9 +877,9 @@ def fk_to_ik_leg(self):  # noqa: F841
         pole_ik.keyframe_insert(data_path="location")
 
     # change IK to FK foot selection, if selected
-    if foot_ik.bone.select:
-        foot_fk.bone.select = True
-        foot_ik.bone.select = False
+    if foot_ik.select:
+        foot_fk.select = True
+        foot_ik.select = False
 
 
 def bake_ik_to_fk_leg(self):
@@ -997,9 +997,9 @@ def ik_to_fk_leg(self):  # noqa: F841
         toes_fk.keyframe_insert(data_path="scale")
 
     # change IK to FK foot selection, if selected
-    if foot_fk.bone.select:
-        foot_fk.bone.select = False
-        foot_ik.bone.select = True
+    if foot_fk.select:
+        foot_fk.select = False
+        foot_ik.select = True
 
 
 def get_active_child_of_cns(bone):

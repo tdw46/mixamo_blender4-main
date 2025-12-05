@@ -23,7 +23,7 @@ def bake_anim(
     def get_bones_matrix():
         matrix = {}
         for pbone in armature.pose.bones:
-            if only_selected and not pbone.bone.select:
+            if only_selected and not pbone.select:
                 continue
 
             bmat = pbone.matrix
@@ -143,7 +143,7 @@ def bake_anim(
     # set transforms and store keyframes
     if bake_bones:
         for pb in armature.pose.bones:
-            if only_selected and not pb.bone.select:
+            if only_selected and not pb.select:
                 continue
 
             euler_prev = None
