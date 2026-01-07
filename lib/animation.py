@@ -3,6 +3,7 @@ from mathutils import Matrix
 
 from . import animation_compat
 from .animation_compat import has_slotted_actions
+from .bones_pose import is_pose_bone_selected
 from .maths_geo import get_ik_pole_pos
 from .version import blender_version
 
@@ -23,7 +24,7 @@ def bake_anim(
     def get_bones_matrix():
         matrix = {}
         for pbone in armature.pose.bones:
-            if only_selected and not pbone.select:
+            if only_selected and not is_pose_bone_selected(pbone):
                 continue
 
             bmat = pbone.matrix
@@ -143,7 +144,7 @@ def bake_anim(
     # set transforms and store keyframes
     if bake_bones:
         for pb in armature.pose.bones:
-            if only_selected and not pb.select:
+            if only_selected and not is_pose_bone_selected(pb):
                 continue
 
             euler_prev = None

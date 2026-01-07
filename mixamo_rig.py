@@ -32,6 +32,7 @@ from .lib.bones_edit import copy_bone_transforms, create_edit_bone, get_edit_bon
 from .lib.bones_pose import (
     get_custom_shape_scale,
     get_pose_bone,
+    set_pose_bone_selected,
     lock_pbone_transform,
     set_bone_color_group,
     set_bone_custom_shape,
@@ -3508,7 +3509,7 @@ def _bake_anim(self, context):
     for pbone in rig.pose.bones:
         if "mixamo_ctrl" in pbone.bone.keys():
             rig.data.bones.active = pbone.bone
-            pbone.select = True
+            set_pose_bone_selected(pbone, True)
             found_ctrl = True
 
     if not found_ctrl:  # backward compatibility, use layer 0 instead
@@ -3519,7 +3520,7 @@ def _bake_anim(self, context):
                 pb = rig.pose.bones.get(b.name)
                 if pb is not None:
                     rig.data.bones.active = pb.bone
-                    pb.select = True
+                    set_pose_bone_selected(pb, True)
 
         # ~ for pbone in rig.pose.bones:
         # ~ if pbone.bone.layers[0]:
@@ -4117,11 +4118,11 @@ def _import_anim(src_arm, tar_arm, import_only=False):
 
             ik_pole_ctrl = get_pose_bone(ik_pole_name)
             tar_arm.data.bones.active = ik_pole_ctrl.bone
-            ik_pole_ctrl.select = True
+            set_pose_bone_selected(ik_pole_ctrl, True)
 
         # select
         tar_arm.data.bones.active = tar_bone.bone
-        tar_bone.select = True
+        set_pose_bone_selected(tar_bone, True)
 
     bpy.context.view_layer.update()
 

@@ -31,6 +31,52 @@ def get_pose_bone(name):
     return bpy.context.active_object.pose.bones.get(name)
 
 
+def set_pose_bone_selected(pbone, state=True):
+    if pbone is None:
+        return
+
+    try:
+        if hasattr(pbone, "bone") and pbone.bone is not None and hasattr(
+            pbone.bone, "select"
+        ):
+            pbone.bone.select = state
+            return
+        if hasattr(pbone, "select"):
+            pbone.select = state
+            return
+        arm_obj = getattr(pbone, "id_data", None)
+        arm_data = getattr(arm_obj, "data", None)
+        if arm_data is not None and hasattr(arm_data, "bones"):
+            b = arm_data.bones.get(pbone.name)
+            if b is not None and hasattr(b, "select"):
+                b.select = state
+    except Exception:
+        return
+
+
+def is_pose_bone_selected(pbone):
+    if pbone is None:
+        return False
+
+    try:
+        if hasattr(pbone, "bone") and pbone.bone is not None and hasattr(
+            pbone.bone, "select"
+        ):
+            return bool(pbone.bone.select)
+        if hasattr(pbone, "select"):
+            return bool(pbone.select)
+        arm_obj = getattr(pbone, "id_data", None)
+        arm_data = getattr(arm_obj, "data", None)
+        if arm_data is not None and hasattr(arm_data, "bones"):
+            b = arm_data.bones.get(pbone.name)
+            if b is not None and hasattr(b, "select"):
+                return bool(b.select)
+    except Exception:
+        return False
+
+    return False
+
+
 def lock_pbone_transform(pbone, type, list):
     for i in list:
         if type == "location":

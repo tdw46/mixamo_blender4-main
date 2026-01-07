@@ -9,7 +9,13 @@ from .definitions.naming import (
 )
 
 # Import from lib modules
-from .lib.bones_pose import get_pose_bone, get_selected_pbone_name, update_transform
+from .lib.bones_pose import (
+    get_pose_bone,
+    get_selected_pbone_name,
+    is_pose_bone_selected,
+    set_pose_bone_selected,
+    update_transform,
+)
 from .lib.maths_geo import (
     get_ik_pole_pos,
     get_pose_matrix_in_other_space,
@@ -698,9 +704,9 @@ def fk_to_ik_arm(self):  # noqa: F841
         pole.keyframe_insert(data_path="location")
 
     # change FK to IK hand selection, if selected
-    if hand_ik.select:
-        hand_fk.select = True
-        hand_ik.select = False
+    if is_pose_bone_selected(hand_ik):
+        set_pose_bone_selected(hand_fk, True)
+        set_pose_bone_selected(hand_ik, False)
 
 
 def bake_ik_to_fk_arm(self):
@@ -794,9 +800,9 @@ def ik_to_fk_arm(self):
         forearm_fk.keyframe_insert(data_path="rotation_euler")
 
     # change FK to IK hand selection, if selected
-    if hand_fk.select:
-        hand_fk.select = False
-        hand_ik.select = True
+    if is_pose_bone_selected(hand_fk):
+        set_pose_bone_selected(hand_fk, False)
+        set_pose_bone_selected(hand_ik, True)
 
 
 def bake_fk_to_ik_leg(self):
@@ -877,9 +883,9 @@ def fk_to_ik_leg(self):  # noqa: F841
         pole_ik.keyframe_insert(data_path="location")
 
     # change IK to FK foot selection, if selected
-    if foot_ik.select:
-        foot_fk.select = True
-        foot_ik.select = False
+    if is_pose_bone_selected(foot_ik):
+        set_pose_bone_selected(foot_fk, True)
+        set_pose_bone_selected(foot_ik, False)
 
 
 def bake_ik_to_fk_leg(self):
@@ -997,9 +1003,9 @@ def ik_to_fk_leg(self):  # noqa: F841
         toes_fk.keyframe_insert(data_path="scale")
 
     # change IK to FK foot selection, if selected
-    if foot_fk.select:
-        foot_fk.select = False
-        foot_ik.select = True
+    if is_pose_bone_selected(foot_fk):
+        set_pose_bone_selected(foot_fk, False)
+        set_pose_bone_selected(foot_ik, True)
 
 
 def get_active_child_of_cns(bone):
