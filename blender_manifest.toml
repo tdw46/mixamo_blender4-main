@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "mixamo_rig"
-version = "1.1.8"
+version = "1.1.9"
 name = "Mixamo Rig"
 tagline = "Generate a control rig from Mixamo Fbx skeleton"
 maintainer = "BeyondDev (Tyler Walker) <tyler@beyondstudios.us>"
@@ -36,6 +36,8 @@ paths_exclude_pattern = [
   "*.zip",
   "*.log",
   "*.bat",
+  "*.sh",
+  "*.command",
   ".DS_Store",
   "Thumbs.db",
   ".vscode/",
