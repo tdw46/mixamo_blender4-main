@@ -32,10 +32,10 @@ from .lib.bones_edit import copy_bone_transforms, create_edit_bone, get_edit_bon
 from .lib.bones_pose import (
     get_custom_shape_scale,
     get_pose_bone,
-    set_pose_bone_selected,
     lock_pbone_transform,
     set_bone_color_group,
     set_bone_custom_shape,
+    set_pose_bone_selected,
 )
 from .lib.constraints import (
     add_copy_transf,
@@ -105,10 +105,96 @@ def search_layer_collection(layer_collection, collection_name):
     return None
 
 
+def _get_armature_pose_bone(armature, bone_name):
+    if armature is None or bone_name is None:
+        return None
+
+    pose = getattr(armature, "pose", None)
+    if pose is None:
+        return None
+
+    return pose.bones.get(bone_name)
+
+
+def _ensure_ik_fk_switch_prop(pbone, default_value=0.0):
+    if pbone is None:
+        return False
+
+    if "ik_fk_switch" not in pbone.keys():
+        create_custom_prop(
+            node=pbone,
+            prop_name="ik_fk_switch",
+            prop_val=default_value,
+            prop_min=0.0,
+            prop_max=1.0,
+            prop_description="IK-FK switch value",
+        )
+        pbone["ik_fk_switch"] = default_value
+        return True
+
+    return False
+
+
+def _refresh_control_rig_setup(rig):
+    if rig is None or rig.type != "ARMATURE":
+        return
+
+    if "mr_control_rig" not in rig.data.keys():
+        return
+
+    try:
+        _deselect_all_objects()
+        set_active_object(rig.name)
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.mode_set(mode="POSE")
+        except Exception:
+            pass
+        bpy.context.view_layer.update()
+        _build_constraints_for_rig(rig)
+        bpy.context.view_layer.update()
+    except Exception as exc:
+        print(f"  Warning: Could not refresh control rig setup: {exc}")
+
+
+def _resolve_limb_kinematic_mode(
+    rig,
+    ik_ctrl_name,
+    fk_ctrl_name,
+    limb_label,
+    default_switch=0.0,
+):
+    ik_ctrl_pb = _get_armature_pose_bone(rig, ik_ctrl_name)
+    if ik_ctrl_pb is not None:
+        if _ensure_ik_fk_switch_prop(ik_ctrl_pb, default_switch):
+            print(f"  Restored IK/FK switch on {ik_ctrl_name}")
+
+        try:
+            return "IK" if ik_ctrl_pb["ik_fk_switch"] < 0.5 else "FK"
+        except Exception as exc:
+            print(
+                f"  Warning: Could not read IK/FK switch on {ik_ctrl_name}: {exc}"
+            )
+            return "IK" if default_switch < 0.5 else "FK"
+
+    if _get_armature_pose_bone(rig, fk_ctrl_name) is not None:
+        print(
+            f"  Warning: Missing IK controller {ik_ctrl_name} for {limb_label}; "
+            "falling back to FK"
+        )
+        return "FK"
+
+    print(
+        f"  Warning: Missing both IK and FK controllers for {limb_label}; "
+        "skipping that limb"
+    )
+    return None
+
+
 # OPERATOR CLASSES
 ##################
 class MR_OT_update(bpy.types.Operator):  # noqa: N801
-    """Update old control rig to Blender 3.0"""
+    """Update old control rig to Blender 3.0 and newer"""
 
     bl_idname = "mr.update"
     bl_label = "update"
@@ -3808,24 +3894,32 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     except Exception:
         pass
 
-    hand_left_name = get_src_bone_name("LeftHand")
-    hand_right_name = get_src_bone_name("RightHand")
-    foot_left_name = get_src_bone_name("LeftFoot")
-    foot_right_name = get_src_bone_name("RightFoot")
+    _refresh_control_rig_setup(tar_arm)
 
-    get_pose_bone(hand_left_name)
-    c_hand_ik_left_pb = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + "_Left")
-    get_pose_bone(hand_right_name)
-    c_hand_ik_right_pb = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + "_Right")
-    get_pose_bone(foot_left_name)
-    c_foot_ik_left_pb = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + "_Left")
-    get_pose_bone(foot_right_name)
-    c_foot_ik_right_pb = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + "_Right")
-
-    arm_left_kinematic = "IK" if c_hand_ik_left_pb["ik_fk_switch"] < 0.5 else "FK"
-    arm_right_kinematic = "IK" if c_hand_ik_right_pb["ik_fk_switch"] < 0.5 else "FK"
-    leg_left_kinematic = "IK" if c_foot_ik_left_pb["ik_fk_switch"] < 0.5 else "FK"
-    leg_right_kinematic = "IK" if c_foot_ik_right_pb["ik_fk_switch"] < 0.5 else "FK"
+    arm_left_kinematic = _resolve_limb_kinematic_mode(
+        tar_arm,
+        c_prefix + arm_rig_names["hand_ik"] + "_Left",
+        c_prefix + arm_rig_names["hand_fk"] + "_Left",
+        "left arm",
+    )
+    arm_right_kinematic = _resolve_limb_kinematic_mode(
+        tar_arm,
+        c_prefix + arm_rig_names["hand_ik"] + "_Right",
+        c_prefix + arm_rig_names["hand_fk"] + "_Right",
+        "right arm",
+    )
+    leg_left_kinematic = _resolve_limb_kinematic_mode(
+        tar_arm,
+        c_prefix + leg_rig_names["foot_ik"] + "_Left",
+        c_prefix + leg_rig_names["foot_fk"] + "_Left",
+        "left leg",
+    )
+    leg_right_kinematic = _resolve_limb_kinematic_mode(
+        tar_arm,
+        c_prefix + leg_rig_names["foot_ik"] + "_Right",
+        c_prefix + leg_rig_names["foot_fk"] + "_Right",
+        "right leg",
+    )
 
     # Set bones mapping for retargetting
     bones_map = {}
@@ -3836,8 +3930,10 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     bones_map[get_src_bone_name("Spine2")] = c_prefix + "Spine2"
     bones_map[get_src_bone_name("Neck")] = c_prefix + "Neck"
     bones_map[get_src_bone_name("Head")] = c_prefix + "Head"
-    bones_map[get_src_bone_name("LeftShoulder")] = c_prefix + "Shoulder_Left"
-    bones_map[get_src_bone_name("RightShoulder")] = c_prefix + "Shoulder_Right"
+    if _get_armature_pose_bone(tar_arm, c_prefix + "Shoulder_Left") is not None:
+        bones_map[get_src_bone_name("LeftShoulder")] = c_prefix + "Shoulder_Left"
+    if _get_armature_pose_bone(tar_arm, c_prefix + "Shoulder_Right") is not None:
+        bones_map[get_src_bone_name("RightShoulder")] = c_prefix + "Shoulder_Right"
 
     # Arm
     if arm_left_kinematic == "FK":
@@ -3913,18 +4009,26 @@ def _import_anim(src_arm, tar_arm, import_only=False):
     ctrl_matrices = {}
     ik_bones_data = {}
 
-    kinematics = {
-        "HandLeft": ["Hand", arm_left_kinematic, "Left"],
-        "HandRight": ["Hand", arm_right_kinematic, "Right"],
-        "FootLeft": ["Foot", leg_left_kinematic, "Left"],
-        "FootRight": ["Foot", leg_right_kinematic, "Right"],
-    }
+    kinematics = {}
+
+    if arm_left_kinematic is not None:
+        kinematics["HandLeft"] = ["Hand", arm_left_kinematic, "Left"]
+    if arm_right_kinematic is not None:
+        kinematics["HandRight"] = ["Hand", arm_right_kinematic, "Right"]
+    if leg_left_kinematic is not None:
+        kinematics["FootLeft"] = ["Foot", leg_left_kinematic, "Left"]
+    if leg_right_kinematic is not None:
+        kinematics["FootRight"] = ["Foot", leg_right_kinematic, "Right"]
+
     for b in kinematics:
         type, kin_mode, side = kinematics[b]
         ctrl_name = c_prefix + type + "_" + kin_mode + "_" + side
-        ctrl_ebone = get_edit_bone(ctrl_name)
+        ctrl_ebone = tar_arm.data.edit_bones.get(ctrl_name)
         mix_bone_name = get_src_bone_name(side + type)
 
+        if ctrl_ebone is None:
+            print(f"  Warning: Missing target control bone {ctrl_name}; skipping")
+            continue
         ctrl_matrices[ctrl_name] = ctrl_ebone.matrix.copy(), mix_bone_name
 
         # store corrected ik bones
@@ -3937,8 +4041,15 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             elif type == "Hand":
                 ik_chain = ["Arm_IK_" + side, "ForeArm_IK_" + side]
 
-            ik1 = get_edit_bone(ik_chain[0])
-            ik2 = get_edit_bone(ik_chain[1])
+            ik1 = tar_arm.data.edit_bones.get(ik_chain[0])
+            ik2 = tar_arm.data.edit_bones.get(ik_chain[1])
+
+            if ik1 is None or ik2 is None:
+                print(
+                    "  Warning: Missing IK helper bones on target rig for "
+                    f"{type} {side}; skipping IK helper setup"
+                )
+                continue
 
             ik_bones["ik1"] = ik1.name, ik1.head.copy(), ik1.tail.copy(), ik1.roll
             ik_bones["ik2"] = ik2.name, ik2.head.copy(), ik2.tail.copy(), ik2.roll
@@ -3997,7 +4108,14 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         foot_ebone = create_edit_bone(name)
         foot_ebone.head, foot_ebone.tail = [0, 0, 0], [0, 0, 0.1]
         foot_ebone.matrix = ctrl_matrices[name][0]
-        foot_ebone.parent = get_edit_bone(ctrl_matrices[name][1])
+        parent_bone = get_edit_bone(ctrl_matrices[name][1])
+        if parent_bone is None:
+            print(
+                "    Warning: Helper parent bone not found: "
+                f"{ctrl_matrices[name][1]}"
+            )
+        else:
+            foot_ebone.parent = parent_bone
         print(f"    Created helper bone: {name}")
 
     # add IK bones helpers
@@ -4021,8 +4139,8 @@ def _import_anim(src_arm, tar_arm, import_only=False):
         type, side, ik_bones = ik_bones_data[b]
         b1_name = ik_bones["ik1"][0]
         b2_name = ik_bones["ik2"][0]
-        b1_pb = get_pose_bone(b1_name)
-        b2_pb = get_pose_bone(b2_name)
+        b1_pb = _get_armature_pose_bone(src_arm, b1_name)
+        b2_pb = _get_armature_pose_bone(src_arm, b2_name)
 
         chain = []
         if type == "Foot":
@@ -4038,6 +4156,13 @@ def _import_anim(src_arm, tar_arm, import_only=False):
                 get_src_bone_name(side + "ForeArm"),
             ]
             bake_ik_data["Arm" + side] = chain
+
+        if b1_pb is None or b2_pb is None:
+            print(
+                "  Warning: Missing source IK helper pose bones for "
+                f"{type} {side}; skipping IK bake helpers"
+            )
+            continue
 
         cns = b1_pb.constraints.new("COPY_TRANSFORMS")
         cns.name = "Copy Transforms"
@@ -4118,9 +4243,12 @@ def _import_anim(src_arm, tar_arm, import_only=False):
             elif "Foot" in src_name:
                 ik_pole_name = c_prefix + leg_rig_names["pole_ik"] + _side
 
-            ik_pole_ctrl = get_pose_bone(ik_pole_name)
-            tar_arm.data.bones.active = ik_pole_ctrl.bone
-            set_pose_bone_selected(ik_pole_ctrl, True)
+            ik_pole_ctrl = _get_armature_pose_bone(tar_arm, ik_pole_name)
+            if ik_pole_ctrl is not None:
+                tar_arm.data.bones.active = ik_pole_ctrl.bone
+                set_pose_bone_selected(ik_pole_ctrl, True)
+            else:
+                print(f"    Warning: IK pole control not found: {ik_pole_name}")
 
         # select
         tar_arm.data.bones.active = tar_bone.bone
