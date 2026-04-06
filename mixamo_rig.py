@@ -375,6 +375,7 @@ class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
                 restore_armature_layers(layer_select)
                 remove_retarget_cns(context.active_object)
                 remove_temp_objects()
+                remove_temp_actions()
                 clean_scene()
 
             self.report({"INFO"}, "Control Rig Done!")
@@ -496,6 +497,7 @@ class MR_OT_import_anim(bpy.types.Operator):  # noqa: N801
                         pass
 
                 remove_temp_objects()
+                remove_temp_actions()
 
             self.report({"INFO"}, "Animation imported")
 
@@ -4170,6 +4172,23 @@ def remove_temp_objects():
     for obj in bpy.data.objects:
         if "mix_to_del" in obj.keys():
             delete_object(obj)
+
+
+def remove_temp_actions():
+    for action in list(bpy.data.actions):
+        try:
+            lower_name = (getattr(action, "name", "") or "").lower()
+            if "|mixamo.com|layer" not in lower_name and "|layer0" not in lower_name:
+                continue
+            try:
+                action.use_fake_user = False
+            except Exception:
+                pass
+            if getattr(action, "users", 0) != 0:
+                continue
+            bpy.data.actions.remove(action)
+        except Exception:
+            continue
 
 
 def update_mixamo_tab():
