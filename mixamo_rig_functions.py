@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import bpy
+from bpy.app.handlers import persistent
 from mathutils import Matrix
 
 # Import from definitions
@@ -49,6 +52,17 @@ ik_arm = [
     c_prefix + arm_rig_names["hand_ik"],
     c_prefix + arm_rig_names["pole_ik"],
 ]
+
+AUTO_SNAP_SWITCH_THRESHOLD = 0.05
+AUTO_SNAP_SWITCH_EPSILON = 0.0001
+AUTO_SNAP_CTRL_NAMES = (
+    ("LEG", "Left", c_prefix + leg_rig_names["foot_ik"] + "_Left"),
+    ("LEG", "Right", c_prefix + leg_rig_names["foot_ik"] + "_Right"),
+    ("ARM", "Left", c_prefix + arm_rig_names["hand_ik"] + "_Left"),
+    ("ARM", "Right", c_prefix + arm_rig_names["hand_ik"] + "_Right"),
+)
+_auto_snap_state = {}
+_auto_snap_running = False
 
 ################## OPERATOR CLASSES ###################
 
@@ -320,6 +334,9 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
     prefix: bpy.props.StringProperty(name="", default="")
     type: bpy.props.StringProperty(name="type", default="")
     force_keyframes = False
+    suppress_keyframes = False
+    apply_switch = True
+    update_selection = True
 
     @classmethod
     def poll(cls, context):
@@ -332,6 +349,7 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
         try:
             self.rig = context.active_object
             self.force_keyframes = True
+            clear_auto_snap_rig_state(self.rig)
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
             self._side = "_" + self.side
@@ -344,10 +362,9 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
                 self.type = "ARM"
 
             if self.type == "ARM":
-                # base_hand = get_pose_bone(self.prefix+self.side+'Hand')
                 c_hand_ik = get_pose_bone(
                     c_prefix + arm_rig_names["hand_ik"] + self._side
-                )  # self.prefix+self.side+'Hand')
+                )
                 if c_hand_ik["ik_fk_switch"] < 0.5:
                     insert_arm_ik_keys(self._side, prev_frame)
                     fk_to_ik_arm(self)
@@ -361,17 +378,81 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
                 if _control_rig_needs_fk_foot_fix(self.rig):
                     _repair_fk_foot_setup(context, self.rig)
 
-                # base_foot = get_pose_bone(self.prefix+self.side+'Foot')
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
-                )  # get_pose_bone(self.prefix+self.side+'Foot')
+                )
                 if c_foot_ik["ik_fk_switch"] < 0.5:
                     insert_leg_ik_keys(self._side, prev_frame)
                     fk_to_ik_leg(self)
                 else:
                     insert_leg_fk_keys(self._side, prev_frame)
                     ik_to_fk_leg(self)
+        finally:
+            context.preferences.edit.use_global_undo = use_global_undo
 
+        return {"FINISHED"}
+
+
+class MR_OT_switch_snap_no_key(bpy.types.Operator):  # noqa: N801
+    """Switch and snap IK-FK for the current frame without creating keys"""
+
+    bl_idname = "pose.mr_switch_snap_no_key"
+    bl_label = "Snap IK/FK"
+    bl_options = {"UNDO"}
+
+    rig = None
+    side: bpy.props.StringProperty(name="bone side", default="")
+    _side = ""
+    prefix: bpy.props.StringProperty(name="", default="")
+    type: bpy.props.StringProperty(name="type", default="")
+    force_keyframes = False
+    suppress_keyframes = True
+    apply_switch = True
+    update_selection = True
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.mode == "POSE"
+
+    def execute(self, context):
+        use_global_undo = context.preferences.edit.use_global_undo
+        context.preferences.edit.use_global_undo = False
+
+        try:
+            self.rig = context.active_object
+            clear_auto_snap_rig_state(self.rig)
+            bname = get_selected_pbone_name()
+            self.side = get_bone_side(bname)
+            self._side = "_" + self.side
+            self.prefix = get_mixamo_prefix()
+
+            if is_selected(fk_leg, bname) or is_selected(ik_leg, bname):
+                self.type = "LEG"
+            elif is_selected(fk_arm, bname) or is_selected(ik_arm, bname):
+                self.type = "ARM"
+
+            if self.type == "ARM":
+                c_hand_ik = get_pose_bone(
+                    c_prefix + arm_rig_names["hand_ik"] + self._side
+                )
+                if c_hand_ik["ik_fk_switch"] < 0.5:
+                    fk_to_ik_arm(self)
+                else:
+                    ik_to_fk_arm(self)
+
+            elif self.type == "LEG":
+                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
+
+                if _control_rig_needs_fk_foot_fix(self.rig):
+                    _repair_fk_foot_setup(context, self.rig)
+
+                c_foot_ik = get_pose_bone(
+                    c_prefix + leg_rig_names["foot_ik"] + self._side
+                )
+                if c_foot_ik["ik_fk_switch"] < 0.5:
+                    fk_to_ik_leg(self)
+                else:
+                    ik_to_fk_leg(self)
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
 
@@ -666,6 +747,8 @@ def snap_rot(pose_bone, target_bone):
 
 
 def should_insert_switch_keys(operator=None):
+    if operator is not None and getattr(operator, "suppress_keyframes", False):
+        return False
     if operator is not None and getattr(operator, "force_keyframes", False):
         return True
     return bpy.context.scene.tool_settings.use_keyframe_insert_auto
@@ -742,6 +825,133 @@ def insert_leg_fk_keys(_side, frame=None):
     insert_bone_key(toes_fk, "scale", frame)
 
 
+def get_switch_behavior_flags(operator):
+    return (
+        getattr(operator, "apply_switch", True),
+        getattr(operator, "update_selection", True),
+    )
+
+
+def build_snap_context(rig, side, *, apply_switch=True, update_selection=True):
+    return SimpleNamespace(
+        rig=rig,
+        side=side,
+        _side="_" + side,
+        prefix=get_mixamo_prefix(),
+        force_keyframes=False,
+        suppress_keyframes=True,
+        apply_switch=apply_switch,
+        update_selection=update_selection,
+    )
+
+
+def auto_prepare_switch_target(rig, limb_type, side, target_mode):
+    snap_ctx = build_snap_context(
+        rig,
+        side,
+        apply_switch=False,
+        update_selection=False,
+    )
+
+    if limb_type == "LEG":
+        from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
+
+        if _control_rig_needs_fk_foot_fix(rig):
+            _repair_fk_foot_setup(bpy.context, rig)
+
+        if target_mode == "FK":
+            fk_to_ik_leg(snap_ctx)
+        else:
+            ik_to_fk_leg(snap_ctx)
+    elif limb_type == "ARM":
+        if target_mode == "FK":
+            fk_to_ik_arm(snap_ctx)
+        else:
+            ik_to_fk_arm(snap_ctx)
+
+
+def get_auto_snap_rig_state(rig):
+    return _auto_snap_state.setdefault(rig.as_pointer(), {})
+
+
+def clear_auto_snap_rig_state(rig):
+    if rig is None:
+        return
+    _auto_snap_state.pop(rig.as_pointer(), None)
+
+
+@persistent
+def auto_snap_ik_fk_slider_handler(scene, depsgraph):
+    del scene, depsgraph
+
+    global _auto_snap_running
+
+    if _auto_snap_running:
+        return
+
+    context = bpy.context
+    rig = context.active_object
+    if rig is None or rig.type != "ARMATURE":
+        return
+    if context.mode != "POSE":
+        return
+    if "mr_control_rig" not in rig.data.keys():
+        return
+
+    pose = getattr(rig, "pose", None)
+    if pose is None:
+        return
+
+    rig_state = get_auto_snap_rig_state(rig)
+
+    for limb_type, side, ctrl_name in AUTO_SNAP_CTRL_NAMES:
+        ctrl = pose.bones.get(ctrl_name)
+        if ctrl is None or "ik_fk_switch" not in ctrl.keys():
+            continue
+
+        current = float(ctrl["ik_fk_switch"])
+        state = rig_state.setdefault(
+            ctrl_name,
+            {
+                "last": current,
+                "prepared_fk": False,
+                "prepared_ik": False,
+            },
+        )
+        last = float(state.get("last", current))
+
+        if current <= AUTO_SNAP_SWITCH_THRESHOLD:
+            state["prepared_fk"] = False
+        if current >= 1.0 - AUTO_SNAP_SWITCH_THRESHOLD:
+            state["prepared_ik"] = False
+
+        moving_toward_fk = (
+            last <= AUTO_SNAP_SWITCH_THRESHOLD
+            and current > last + AUTO_SNAP_SWITCH_EPSILON
+        )
+        moving_toward_ik = (
+            last >= 1.0 - AUTO_SNAP_SWITCH_THRESHOLD
+            and current < last - AUTO_SNAP_SWITCH_EPSILON
+        )
+
+        if moving_toward_fk and not state["prepared_fk"]:
+            _auto_snap_running = True
+            try:
+                auto_prepare_switch_target(rig, limb_type, side, "FK")
+                state["prepared_fk"] = True
+            finally:
+                _auto_snap_running = False
+        elif moving_toward_ik and not state["prepared_ik"]:
+            _auto_snap_running = True
+            try:
+                auto_prepare_switch_target(rig, limb_type, side, "IK")
+                state["prepared_ik"] = True
+            finally:
+                _auto_snap_running = False
+
+        state["last"] = float(ctrl["ik_fk_switch"])
+
+
 def bake_fk_to_ik_arm(self):
     for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
@@ -752,6 +962,7 @@ def bake_fk_to_ik_arm(self):
 def fk_to_ik_arm(self):  # noqa: F841
     rig = self.rig
     _side = self._side
+    apply_switch, update_selection = get_switch_behavior_flags(self)
 
     arm_fk = rig.pose.bones[fk_arm[0] + _side]
     forearm_fk = rig.pose.bones[fk_arm[1] + _side]
@@ -777,7 +988,8 @@ def fk_to_ik_arm(self):  # noqa: F841
     # switch
     # base_hand = get_pose_bone(prefix+side+'Hand')
     c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
-    c_hand_ik["ik_fk_switch"] = 1.0
+    if apply_switch:
+        c_hand_ik["ik_fk_switch"] = 1.0
 
     # udpate view
     bpy.context.view_layer.update()
@@ -788,7 +1000,7 @@ def fk_to_ik_arm(self):  # noqa: F841
         insert_arm_ik_keys(_side)
 
     # change FK to IK hand selection, if selected
-    if is_pose_bone_selected(hand_ik):
+    if update_selection and is_pose_bone_selected(hand_ik):
         set_pose_bone_selected(hand_fk, True)
         set_pose_bone_selected(hand_ik, False)
 
@@ -805,6 +1017,7 @@ def ik_to_fk_arm(self):
     rig = self.rig
     side = self.side
     _side = self._side
+    apply_switch, update_selection = get_switch_behavior_flags(self)
 
     arm_fk = rig.pose.bones[fk_arm[0] + _side]
     forearm_fk = rig.pose.bones[fk_arm[1] + _side]
@@ -862,7 +1075,8 @@ def ik_to_fk_arm(self):
     # Switch
     c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
     # base_hand = get_pose_bone(prefix+side+'Hand')
-    c_hand_ik["ik_fk_switch"] = 0.0
+    if apply_switch:
+        c_hand_ik["ik_fk_switch"] = 0.0
 
     # update
     update_transform()
@@ -873,7 +1087,7 @@ def ik_to_fk_arm(self):
         insert_arm_fk_keys(_side)
 
     # change FK to IK hand selection, if selected
-    if is_pose_bone_selected(hand_fk):
+    if update_selection and is_pose_bone_selected(hand_fk):
         set_pose_bone_selected(hand_fk, False)
         set_pose_bone_selected(hand_ik, True)
 
@@ -889,6 +1103,7 @@ def bake_fk_to_ik_leg(self):
 def fk_to_ik_leg(self):  # noqa: F841
     rig = self.rig
     _side = self._side
+    apply_switch, update_selection = get_switch_behavior_flags(self)
 
     thigh_fk = rig.pose.bones[fk_leg[0] + _side]
     leg_fk = rig.pose.bones[fk_leg[1] + _side]
@@ -926,7 +1141,8 @@ def fk_to_ik_leg(self):  # noqa: F841
     # switch prop value
     c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
     # base_foot = get_pose_bone(prefix+side+'Foot')
-    c_foot_ik["ik_fk_switch"] = 1.0
+    if apply_switch:
+        c_foot_ik["ik_fk_switch"] = 1.0
 
     # udpate hack
     bpy.context.view_layer.update()
@@ -940,7 +1156,7 @@ def fk_to_ik_leg(self):  # noqa: F841
         insert_leg_ik_keys(_side)
 
     # change IK to FK foot selection, if selected
-    if is_pose_bone_selected(foot_ik):
+    if update_selection and is_pose_bone_selected(foot_ik):
         set_pose_bone_selected(foot_fk, True)
         set_pose_bone_selected(foot_ik, False)
 
@@ -958,6 +1174,7 @@ def ik_to_fk_leg(self):  # noqa: F841
     side = self.side  # noqa: F841
     _side = self._side
     prefix = self.prefix  # noqa: F841
+    apply_switch, update_selection = get_switch_behavior_flags(self)
 
     thigh_fk = rig.pose.bones[fk_leg[0] + _side]
     leg_fk = rig.pose.bones[fk_leg[1] + _side]
@@ -1034,7 +1251,8 @@ def ik_to_fk_leg(self):  # noqa: F841
     # switch
     c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
     # base_foot = get_pose_bone(prefix+side+'Foot')
-    c_foot_ik["ik_fk_switch"] = 0.0
+    if apply_switch:
+        c_foot_ik["ik_fk_switch"] = 0.0
 
     update_transform()
 
@@ -1044,7 +1262,7 @@ def ik_to_fk_leg(self):  # noqa: F841
         insert_leg_fk_keys(_side)
 
     # change IK to FK foot selection, if selected
-    if is_pose_bone_selected(foot_fk):
+    if update_selection and is_pose_bone_selected(foot_fk):
         set_pose_bone_selected(foot_fk, False)
         set_pose_bone_selected(foot_ik, True)
 
@@ -1162,6 +1380,7 @@ class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
             foot_ik_name = c_prefix + leg_rig_names["foot_ik"] + "_" + side.title()
             c_foot_ik = get_pose_bone(foot_ik_name)
             col.prop(c_foot_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
+            col.operator(MR_OT_switch_snap_no_key.bl_idname, text="Snap IK/FK")
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK/FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
 
@@ -1176,6 +1395,7 @@ class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
             hand_ik_name = c_prefix + arm_rig_names["hand_ik"] + "_" + side.title()
             c_hand_ik = get_pose_bone(hand_ik_name)
             col.prop(c_hand_ik, '["ik_fk_switch"]', text="IK-FK Switch", slider=True)
+            col.operator(MR_OT_switch_snap_no_key.bl_idname, text="Snap IK/FK")
             col.operator(MR_OT_switch_snap.bl_idname, text="Snap Frame IK-FK")
             col.operator(MR_OT_switch_snap_anim.bl_idname, text="Snap Anim IK-FK")
 
@@ -1186,6 +1406,7 @@ classes = (
     MR_OT_arm_fk_to_ik,
     MR_OT_arm_bake_ik_to_fk,
     MR_OT_arm_ik_to_fk,
+    MR_OT_switch_snap_no_key,
     MR_OT_switch_snap,
     MR_OT_leg_fk_to_ik,
     MR_OT_leg_bake_fk_to_ik,
@@ -1221,9 +1442,17 @@ def register():
         default=False,
     )
 
+    if auto_snap_ik_fk_slider_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(auto_snap_ik_fk_slider_handler)
+
 
 def unregister():
     from bpy.utils import unregister_class
+
+    if auto_snap_ik_fk_slider_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(auto_snap_ik_fk_slider_handler)
+
+    _auto_snap_state.clear()
 
     for cls in classes:
         unregister_class(cls)
