@@ -232,7 +232,9 @@ def _has_fk_foot_setup_issue(rig, side):
     foot_fk_bone = rig.data.bones.get(foot_fk_name)
     c_toe_fk_bone = rig.data.bones.get(c_toe_fk_name)
 
-    if not all([foot_bone, c_calf_fk_bone, c_foot_fk_bone, foot_fk_bone, c_toe_fk_bone]):
+    if not all(
+        [foot_bone, c_calf_fk_bone, c_foot_fk_bone, foot_fk_bone, c_toe_fk_bone]
+    ):
         return False
 
     if c_foot_fk_bone.parent != c_calf_fk_bone:
@@ -346,6 +348,486 @@ def _repair_fk_foot_setup(context, rig=None, force=False):
             pass
 
     return fixed_sides
+
+
+def _get_meshes_using_rig(rig):
+    if rig is None:
+        return []
+
+    meshes = []
+    seen = set()
+
+    def add_mesh(obj):
+        if obj is None or obj.type != "MESH":
+            return
+        if obj.name in seen:
+            return
+        seen.add(obj.name)
+        meshes.append(obj)
+
+    stack = list(rig.children)
+    while stack:
+        child = stack.pop()
+        stack.extend(child.children)
+        add_mesh(child)
+
+    for obj in bpy.data.objects:
+        if obj.type != "MESH":
+            continue
+        if obj.find_armature() == rig:
+            add_mesh(obj)
+            continue
+        for mod in obj.modifiers:
+            if mod.type == "ARMATURE" and mod.object == rig:
+                add_mesh(obj)
+                break
+
+    return meshes
+
+
+def _get_custom_shape_display_matrix(rig, pbone):
+    if pbone.custom_shape_transform:
+        base_matrix = rig.matrix_world @ pbone.custom_shape_transform.matrix
+    else:
+        base_matrix = rig.matrix_world @ pbone.matrix
+
+    scale_xyz = get_custom_shape_scale(pbone, uniform=False)
+    length = max(getattr(pbone, "length", 0.0), 1e-8)
+    scale_matrix = Matrix.Diagonal(
+        (
+            scale_xyz[0] * length,
+            scale_xyz[1] * length,
+            scale_xyz[2] * length,
+            1.0,
+        )
+    )
+    return base_matrix @ scale_matrix
+
+
+def _get_visible_collection_for_shape_copy(rig, source_obj):
+    active_layer_collection = getattr(bpy.context, "layer_collection", None)
+    if active_layer_collection and active_layer_collection.is_visible:
+        return active_layer_collection.collection
+
+    for col in getattr(rig, "users_collection", []):
+        layer_col = search_layer_collection(
+            bpy.context.view_layer.layer_collection, col.name
+        )
+        if layer_col and not layer_col.hide_viewport and not col.hide_viewport:
+            return col
+
+    for col in getattr(source_obj, "users_collection", []):
+        layer_col = search_layer_collection(
+            bpy.context.view_layer.layer_collection, col.name
+        )
+        if layer_col and not layer_col.hide_viewport and not col.hide_viewport:
+            return col
+
+    return bpy.context.scene.collection
+
+
+def _ensure_unique_custom_shape_copy(rig, pbone):
+    shape_obj = getattr(pbone, "custom_shape", None)
+    if shape_obj is None or shape_obj.type != "MESH" or shape_obj.data is None:
+        return None
+
+    obj_name = ("cs_user_" + pbone.name)[:63]
+    if shape_obj.name == obj_name:
+        return shape_obj
+
+    existing = bpy.data.objects.get(obj_name)
+    if existing is not None and existing.type == "MESH" and existing.data is not None:
+        if existing.data != shape_obj.data:
+            existing.data = shape_obj.data.copy()
+            existing.data.name = obj_name
+        existing["mr_armature"] = rig.name
+        pbone.custom_shape = existing
+        return existing
+
+    new_obj = shape_obj.copy()
+    new_obj.data = shape_obj.data.copy()
+    new_obj.name = obj_name
+    new_obj.data.name = obj_name
+
+    target_collection = _get_visible_collection_for_shape_copy(rig, shape_obj)
+    target_collection.objects.link(new_obj)
+
+    new_obj.parent = shape_obj.parent
+    new_obj["mr_armature"] = rig.name
+    new_obj.hide_viewport = True
+    new_obj.hide_render = True
+    try:
+        hide_object(new_obj)
+    except Exception:
+        pass
+
+    pbone.custom_shape = new_obj
+    return new_obj
+
+
+def _fit_controller_custom_shapes(rig):
+    if rig is None or rig.type != "ARMATURE":
+        return
+
+    meshes_using_rig = _get_meshes_using_rig(rig)
+    if not meshes_using_rig:
+        return
+
+    c_head_pb = _get_armature_pose_bone(rig, c_prefix + head_rig_names["head"])
+    if c_head_pb is not None:
+        _fit_head_circle_shape_to_meshes(rig, c_head_pb, meshes_using_rig)
+
+    for side in ("Left", "Right"):
+        c_hand_ik_pb = _get_armature_pose_bone(
+            rig, c_prefix + arm_rig_names["hand_ik"] + "_" + side
+        )
+        c_hand_fk_pb = _get_armature_pose_bone(
+            rig, c_prefix + arm_rig_names["hand_fk"] + "_" + side
+        )
+        if c_hand_ik_pb is not None:
+            if _fit_hand_circle_shape_to_meshes(rig, c_hand_ik_pb, meshes_using_rig):
+                _copy_custom_shape_geometry(rig, c_hand_ik_pb, c_hand_fk_pb)
+        elif c_hand_fk_pb is not None:
+            _fit_hand_circle_shape_to_meshes(rig, c_hand_fk_pb, meshes_using_rig)
+
+
+def _raycast_meshes_world(meshes, depsgraph, origin_world, direction_world, distance):
+    best_hit_world = None
+    best_hit_dist = None
+
+    for obj in meshes:
+        eval_obj = obj.evaluated_get(depsgraph)
+        if eval_obj.type != "MESH":
+            continue
+
+        inv_world = eval_obj.matrix_world.inverted_safe()
+        direction_local = inv_world.to_3x3() @ direction_world
+        if direction_local.length_squared < 1e-12:
+            continue
+        direction_local.normalize()
+
+        hit, location, _normal, _face_index = eval_obj.ray_cast(
+            inv_world @ origin_world,
+            direction_local,
+            distance=distance,
+        )
+        if not hit:
+            continue
+
+        hit_world = eval_obj.matrix_world @ location
+        hit_dist = (hit_world - origin_world).length
+        if best_hit_dist is None or hit_dist < best_hit_dist:
+            best_hit_dist = hit_dist
+            best_hit_world = hit_world
+
+    return best_hit_world, best_hit_dist
+
+
+def _get_mesh_vertices_world(meshes, depsgraph, center_world=None, max_distance=None):
+    vertices_world = []
+    max_distance_sq = None
+    if center_world is not None and max_distance is not None:
+        max_distance_sq = max_distance * max_distance
+
+    for obj in meshes:
+        if obj.type != "MESH":
+            continue
+
+        if center_world is not None and max_distance is not None:
+            obj_radius = max(obj.dimensions.length * 0.5, 0.001)
+            if (
+                obj.matrix_world.translation - center_world
+            ).length > max_distance + obj_radius:
+                continue
+
+        eval_obj = obj.evaluated_get(depsgraph)
+        if eval_obj.type != "MESH":
+            continue
+
+        mesh_data = eval_obj.to_mesh()
+        try:
+            world_matrix = eval_obj.matrix_world
+            for vert in mesh_data.vertices:
+                vert_world = world_matrix @ vert.co
+                if (
+                    center_world is not None
+                    and max_distance_sq is not None
+                    and (vert_world - center_world).length_squared > max_distance_sq
+                ):
+                    continue
+                vertices_world.append(vert_world)
+        finally:
+            eval_obj.to_mesh_clear()
+
+    return vertices_world
+
+
+def _get_shape_plane_normal_local(verts, center_local):
+    offsets = []
+    for vert in verts:
+        offset = vert.co - center_local
+        if offset.length_squared > 1e-12:
+            offsets.append(offset)
+
+    for i, offset_a in enumerate(offsets):
+        for offset_b in offsets[i + 1 :]:
+            normal = offset_a.cross(offset_b)
+            if normal.length_squared > 1e-12:
+                normal.normalize()
+                return normal
+
+    return Vector((0.0, 0.0, 1.0))
+
+
+def _scale_shape_points_in_plane(shape_obj, display_matrix, target_radius_world):
+    if shape_obj is None or shape_obj.data is None or not shape_obj.data.vertices:
+        return
+
+    verts = shape_obj.data.vertices
+    center_local = sum((v.co for v in verts), Vector((0.0, 0.0, 0.0))) / len(verts)
+    plane_normal_local = _get_shape_plane_normal_local(verts, center_local)
+
+    center_world = display_matrix @ center_local
+    normal_world = display_matrix.to_3x3() @ plane_normal_local
+    if normal_world.length_squared < 1e-12:
+        return
+    normal_world.normalize()
+
+    current_radius_world = 0.0
+    for vert in verts:
+        point_world = display_matrix @ vert.co
+        plane_offset_world = point_world - center_world
+        plane_offset_world -= normal_world * plane_offset_world.dot(normal_world)
+        current_radius_world = max(current_radius_world, plane_offset_world.length)
+
+    if current_radius_world <= 1e-8:
+        return
+
+    if abs(target_radius_world - current_radius_world) < 1e-4:
+        return
+
+    scale_factor = target_radius_world / current_radius_world
+    for vert in verts:
+        local_offset = vert.co - center_local
+        local_normal_offset = plane_normal_local * local_offset.dot(plane_normal_local)
+        local_plane_offset = local_offset - local_normal_offset
+        vert.co = center_local + local_plane_offset * scale_factor + local_normal_offset
+
+    shape_obj.data.update()
+
+
+def _copy_custom_shape_geometry(rig, source_pbone, target_pbone):
+    if source_pbone is None or target_pbone is None:
+        return
+
+    source_shape = _ensure_unique_custom_shape_copy(rig, source_pbone)
+    target_shape = _ensure_unique_custom_shape_copy(rig, target_pbone)
+    if source_shape is None or target_shape is None or source_shape.data is None:
+        return
+
+    if target_shape.data is not None and target_shape.data != source_shape.data:
+        target_shape.data = source_shape.data.copy()
+        target_shape.data.name = target_shape.name
+    elif target_shape.data is None:
+        target_shape.data = source_shape.data.copy()
+        target_shape.data.name = target_shape.name
+
+
+def _get_source_data_bone(rig, base_name):
+    if rig is None or rig.type != "ARMATURE":
+        return None
+
+    candidates = [
+        base_name,
+        "mixamorig:" + base_name,
+    ]
+
+    for bone_name in candidates:
+        bone = rig.data.bones.get(bone_name)
+        if bone is not None:
+            return bone
+
+    for bone in rig.data.bones:
+        if bone.name.endswith(":" + base_name):
+            return bone
+
+    return None
+
+
+def _fit_hand_circle_shape_to_meshes(rig, pbone, meshes, margin=0.01):
+    shape_obj = getattr(pbone, "custom_shape", None)
+    if shape_obj is None or shape_obj.data is None or not shape_obj.data.vertices:
+        return False
+    if not meshes or pbone is None:
+        return False
+
+    display_matrix = _get_custom_shape_display_matrix(rig, pbone)
+    verts = shape_obj.data.vertices
+    center_local = sum((v.co for v in verts), Vector((0.0, 0.0, 0.0))) / len(verts)
+    center_world = display_matrix @ center_local
+    plane_normal_local = _get_shape_plane_normal_local(verts, center_local)
+
+    normal_world = display_matrix.to_3x3() @ plane_normal_local
+    if normal_world.length_squared < 1e-12:
+        return False
+    normal_world.normalize()
+
+    current_radius_world = 0.0
+    shape_points = []
+    for vert in verts:
+        point_world = display_matrix @ vert.co
+        plane_offset_world = point_world - center_world
+        plane_offset_world -= normal_world * plane_offset_world.dot(normal_world)
+        radius_world = plane_offset_world.length
+        if radius_world <= 1e-8:
+            continue
+        current_radius_world = max(current_radius_world, radius_world)
+        shape_points.append((vert, point_world, plane_offset_world))
+
+    if current_radius_world <= 1e-8 or not shape_points:
+        return False
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    search_distance = max(current_radius_world * 3.0 + margin, 0.15)
+    mesh_vertices_world = _get_mesh_vertices_world(
+        meshes,
+        depsgraph,
+        center_world=center_world,
+        max_distance=search_distance,
+    )
+
+    if not mesh_vertices_world:
+        return False
+
+    target_radius_world = 0.0
+    found_hit = False
+    normal_limit = max(current_radius_world * 1.5, 0.05)
+    radial_limit = search_distance
+    for vert_world in mesh_vertices_world:
+        offset_world = vert_world - center_world
+        normal_distance = abs(offset_world.dot(normal_world))
+        if normal_distance > normal_limit:
+            continue
+
+        plane_offset_world = (
+            offset_world - normal_world * offset_world.dot(normal_world)
+        )
+        radial_distance = plane_offset_world.length
+        if radial_distance > radial_limit:
+            continue
+
+        target_radius_world = max(target_radius_world, radial_distance + margin)
+        found_hit = True
+
+    if not found_hit:
+        return False
+
+    shape_obj = _ensure_unique_custom_shape_copy(rig, pbone)
+    if shape_obj is None or shape_obj.data is None or not shape_obj.data.vertices:
+        return False
+
+    _scale_shape_points_in_plane(shape_obj, display_matrix, target_radius_world)
+    return True
+
+
+def _fit_head_circle_shape_to_meshes(rig, pbone, meshes, margin=0.01):
+    shape_obj = getattr(pbone, "custom_shape", None)
+    if shape_obj is None or shape_obj.data is None or not shape_obj.data.vertices:
+        return False
+    if not meshes or pbone is None:
+        return False
+
+    display_matrix = _get_custom_shape_display_matrix(rig, pbone)
+    inv_display = display_matrix.inverted_safe()
+    verts = shape_obj.data.vertices
+    world_points = [display_matrix @ vert.co for vert in verts]
+    center_world = sum(world_points, Vector((0.0, 0.0, 0.0))) / len(world_points)
+    center_xy = Vector((center_world.x, center_world.y))
+
+    radius_world = 0.0
+    plane_z_world = 0.0
+    for point_world in world_points:
+        radius_world = max(
+            radius_world,
+            (Vector((point_world.x, point_world.y)) - center_xy).length,
+        )
+        plane_z_world += point_world.z
+    plane_z_world /= len(world_points)
+
+    if radius_world <= 1e-8:
+        return False
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    mesh_vertices_world = _get_mesh_vertices_world(meshes, depsgraph)
+    if not mesh_vertices_world:
+        return False
+
+    max_mesh_z_world = None
+    radial_limit = radius_world + margin
+    for vert_world in mesh_vertices_world:
+        if (Vector((vert_world.x, vert_world.y)) - center_xy).length <= radial_limit:
+            if max_mesh_z_world is None or vert_world.z > max_mesh_z_world:
+                max_mesh_z_world = vert_world.z
+
+    if max_mesh_z_world is None:
+        return False
+
+    shape_obj = _ensure_unique_custom_shape_copy(rig, pbone)
+    if shape_obj is None or shape_obj.data is None or not shape_obj.data.vertices:
+        return False
+    verts = shape_obj.data.vertices
+
+    z_offset_world = (max_mesh_z_world + margin) - plane_z_world
+    if abs(z_offset_world) < 1e-4:
+        z_offset_world = 0.0
+
+    if abs(z_offset_world) >= 1e-4:
+        local_delta = inv_display.to_3x3() @ Vector((0.0, 0.0, z_offset_world))
+        for vert in verts:
+            vert.co += local_delta
+
+        shape_obj.data.update()
+
+    updated_world_points = [display_matrix @ vert.co for vert in verts]
+    updated_center_world = sum(
+        updated_world_points, Vector((0.0, 0.0, 0.0))
+    ) / len(updated_world_points)
+    updated_center_xy = Vector((updated_center_world.x, updated_center_world.y))
+
+    head_bone = _get_source_data_bone(rig, head_names["head"])
+    if head_bone is None:
+        return False
+
+    head_mid_world = rig.matrix_world @ (
+        (head_bone.head_local + head_bone.tail_local) * 0.5
+    )
+    head_length_world = (
+        rig.matrix_world @ head_bone.tail_local
+        - rig.matrix_world @ head_bone.head_local
+    ).length
+    slice_half_height = max(head_length_world * 0.2, margin * 2.0, 0.01)
+
+    radial_samples = []
+    for vert_world in mesh_vertices_world:
+        if abs(vert_world.z - head_mid_world.z) <= slice_half_height:
+            radial_samples.append(
+                (Vector((vert_world.x, vert_world.y)) - updated_center_xy).length
+            )
+
+    if not radial_samples:
+        expanded_half_height = slice_half_height * 2.0
+        for vert_world in mesh_vertices_world:
+            if abs(vert_world.z - head_mid_world.z) <= expanded_half_height:
+                radial_samples.append(
+                    (Vector((vert_world.x, vert_world.y)) - updated_center_xy).length
+                )
+
+    if not radial_samples:
+        return False
+
+    target_radius_world = max(radial_samples) + margin
+    _scale_shape_points_in_plane(shape_obj, display_matrix, target_radius_world)
+    return True
 
 
 # OPERATOR CLASSES
@@ -1029,6 +1511,7 @@ def _build_constraints_for_rig(rig):
         return base_name
 
     bpy.ops.object.mode_set(mode="POSE")
+    meshes_using_rig = _get_meshes_using_rig(rig)
 
     c_master_name = c_prefix + master_rig_names["master"]
 
@@ -1126,6 +1609,7 @@ def _build_constraints_for_rig(rig):
         c_head_pb.custom_shape_scale_xyz[0] = 1.9
         c_head_pb.custom_shape_scale_xyz[1] = 1.9
         c_head_pb.custom_shape_scale_xyz[2] = 1.9
+        _fit_head_circle_shape_to_meshes(rig, c_head_pb, meshes_using_rig)
 
         c_neck_pb.rotation_mode = "XYZ"
         c_head_pb.rotation_mode = "XYZ"
@@ -1910,6 +2394,8 @@ def _build_constraints_for_rig(rig):
         set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
         set_bone_custom_shape(c_hand_fk_pb, "cs_circle")
         set_bone_custom_shape(c_hand_ik_pb, "cs_circle")
+        _fit_hand_circle_shape_to_meshes(rig, c_hand_fk_pb, meshes_using_rig)
+        _fit_hand_circle_shape_to_meshes(rig, c_hand_ik_pb, meshes_using_rig)
 
         c_fingers_pb = []
         for fname in fingers_type:
@@ -1968,6 +2454,8 @@ def _build_constraints_for_rig(rig):
             pose_bone = rig.pose.bones.get(bone.name)
             if pose_bone:
                 pose_bone.custom_shape_wire_width = 3.0
+
+    _fit_controller_custom_shapes(rig)
 
     rig.show_in_front = False
 
@@ -2782,6 +3270,8 @@ def _make_rig(self, context):
     # ==========================================
     print("  Phase 2: Setting up all pose bones...")
     bpy.ops.object.mode_set(mode="POSE")
+    bpy.context.view_layer.update()
+    meshes_using_rig = _get_meshes_using_rig(rig)
 
     # Master pose setup
     print("    Setting up Master pose...")
@@ -2874,6 +3364,7 @@ def _make_rig(self, context):
         c_head_pb.custom_shape_scale_xyz[0] = 1.9
         c_head_pb.custom_shape_scale_xyz[1] = 1.9
         c_head_pb.custom_shape_scale_xyz[2] = 1.9
+        _fit_head_circle_shape_to_meshes(rig, c_head_pb, meshes_using_rig)
 
         # set rotation mode
         c_neck_pb.rotation_mode = "XYZ"
@@ -3613,6 +4104,8 @@ def _make_rig(self, context):
         set_bone_custom_shape(c_pole_ik_pb, "cs_sphere_012")
         set_bone_custom_shape(c_hand_fk_pb, "cs_circle")
         set_bone_custom_shape(c_hand_ik_pb, "cs_circle")
+        _fit_hand_circle_shape_to_meshes(rig, c_hand_fk_pb, meshes_using_rig)
+        _fit_hand_circle_shape_to_meshes(rig, c_hand_ik_pb, meshes_using_rig)
 
         c_fingers_pb = []
 
@@ -3673,6 +4166,9 @@ def _make_rig(self, context):
             pose_bone = rig.pose.bones.get(bone.name)
             if pose_bone:
                 pose_bone.custom_shape_wire_width = 3.0
+
+    print("  Fitting hand and head control shapes...")
+    _fit_controller_custom_shapes(rig)
 
     # Set rig to not show in front
     rig.show_in_front = False

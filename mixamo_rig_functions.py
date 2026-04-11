@@ -67,6 +67,16 @@ _auto_snap_running = False
 ################## OPERATOR CLASSES ###################
 
 
+def ensure_legacy_fk_foot_setup(context, rig):
+    from .mixamo_rig import (
+        _control_rig_needs_fk_foot_fix,
+        _repair_fk_foot_setup,
+    )
+
+    if _control_rig_needs_fk_foot_fix(rig):
+        _repair_fk_foot_setup(context, rig)
+
+
 class MR_OT_arm_bake_fk_to_ik(bpy.types.Operator):  # noqa: N801
     """Snaps and bake an FK to an IK arm over a specified frame range"""
 
@@ -298,10 +308,7 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):  # noqa: N801
                     bake_ik_to_fk_arm(self)
 
             elif self.type == "LEG":
-                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
-
-                if _control_rig_needs_fk_foot_fix(self.rig):
-                    _repair_fk_foot_setup(context, self.rig)
+                ensure_legacy_fk_foot_setup(context, self.rig)
 
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
@@ -373,10 +380,7 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
                     ik_to_fk_arm(self)
 
             elif self.type == "LEG":
-                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
-
-                if _control_rig_needs_fk_foot_fix(self.rig):
-                    _repair_fk_foot_setup(context, self.rig)
+                ensure_legacy_fk_foot_setup(context, self.rig)
 
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
@@ -441,10 +445,7 @@ class MR_OT_switch_snap_no_key(bpy.types.Operator):  # noqa: N801
                     ik_to_fk_arm(self)
 
             elif self.type == "LEG":
-                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
-
-                if _control_rig_needs_fk_foot_fix(self.rig):
-                    _repair_fk_foot_setup(context, self.rig)
+                ensure_legacy_fk_foot_setup(context, self.rig)
 
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
@@ -959,7 +960,7 @@ def bake_fk_to_ik_arm(self):
         fk_to_ik_arm(self)
 
 
-def fk_to_ik_arm(self):  # noqa: F841
+def fk_to_ik_arm(self):
     rig = self.rig
     _side = self._side
     apply_switch, update_selection = get_switch_behavior_flags(self)
@@ -971,7 +972,6 @@ def fk_to_ik_arm(self):  # noqa: F841
     arm_ik = rig.pose.bones[ik_arm[0] + _side]
     forearm_ik = rig.pose.bones[ik_arm[1] + _side]
     hand_ik = rig.pose.bones[ik_arm[2] + _side]
-    pole = rig.pose.bones[ik_arm[3] + _side]
 
     # Snap rot
     snap_rot(arm_fk, arm_ik)
@@ -1100,7 +1100,7 @@ def bake_fk_to_ik_leg(self):
         fk_to_ik_leg(self)
 
 
-def fk_to_ik_leg(self):  # noqa: F841
+def fk_to_ik_leg(self):
     rig = self.rig
     _side = self._side
     apply_switch, update_selection = get_switch_behavior_flags(self)
@@ -1113,10 +1113,7 @@ def fk_to_ik_leg(self):  # noqa: F841
     thigh_ik = rig.pose.bones[ik_leg[0] + _side]
     leg_ik = rig.pose.bones[ik_leg[1] + _side]
     foot_ik = rig.pose.bones[ik_leg[2] + _side]
-    pole_ik = rig.pose.bones[ik_leg[3] + _side]
     toes_ik = rig.pose.bones[ik_leg[4] + _side]
-    foot_01_ik = rig.pose.bones[ik_leg[5] + _side]
-    foot_roll_ik = rig.pose.bones[ik_leg[6] + _side]
     foot_snap_ik = rig.pose.bones[ik_leg[7] + _side]
 
     # Thigh snap
