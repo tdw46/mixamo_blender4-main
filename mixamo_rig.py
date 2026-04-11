@@ -191,6 +191,163 @@ def _resolve_limb_kinematic_mode(
     return None
 
 
+def _detect_mixamo_prefix(rig):
+    if rig is None:
+        return ""
+
+    for bone in rig.data.bones:
+        if bone.name.startswith("mixamorig") and ":" in bone.name:
+            return bone.name.split(":")[0] + ":"
+    return ""
+
+
+def _get_src_bone_name_resolver(rig):
+    detected_prefix = _detect_mixamo_prefix(rig)
+
+    def get_src_bone_name(base_name):
+        if detected_prefix:
+            return detected_prefix + base_name
+        return base_name
+
+    return get_src_bone_name
+
+
+def _has_fk_foot_setup_issue(rig, side):
+    if rig is None or rig.type != "ARMATURE":
+        return False
+    if "mr_control_rig" not in rig.data.keys():
+        return False
+
+    _side = "_" + side
+    get_src_bone_name = _get_src_bone_name_resolver(rig)
+    foot_name = get_src_bone_name(side + leg_names["foot"])
+    c_calf_fk_name = c_prefix + leg_rig_names["calf_fk"] + _side
+    c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
+    foot_fk_name = leg_rig_names["foot_fk"] + _side
+    c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
+
+    foot_bone = rig.data.bones.get(foot_name)
+    c_calf_fk_bone = rig.data.bones.get(c_calf_fk_name)
+    c_foot_fk_bone = rig.data.bones.get(c_foot_fk_name)
+    foot_fk_bone = rig.data.bones.get(foot_fk_name)
+    c_toe_fk_bone = rig.data.bones.get(c_toe_fk_name)
+
+    if not all([foot_bone, c_calf_fk_bone, c_foot_fk_bone, foot_fk_bone, c_toe_fk_bone]):
+        return False
+
+    if c_foot_fk_bone.parent != c_calf_fk_bone:
+        return True
+    if foot_fk_bone.parent != c_foot_fk_bone:
+        return True
+    if c_toe_fk_bone.parent != foot_fk_bone:
+        return True
+
+    ctrl_vs_foot_angle = foot_bone.matrix_local.to_quaternion().rotation_difference(
+        c_foot_fk_bone.matrix_local.to_quaternion()
+    ).angle
+
+    # In the legacy rig, Ctrl_Foot_FK is deliberately flattened relative to the
+    # deform foot rest transform. If the two rest rotations match, the helper
+    # offset that snap depends on has been lost.
+    if ctrl_vs_foot_angle < radians(5):
+        return True
+
+    return False
+
+
+def _control_rig_needs_fk_foot_fix(rig):
+    return any(_has_fk_foot_setup_issue(rig, side) for side in ("Left", "Right"))
+
+
+def _repair_fk_foot_setup(context, rig=None, force=False):
+    rig = rig or context.active_object
+    if rig is None or rig.type != "ARMATURE":
+        return []
+    if "mr_control_rig" not in rig.data.keys():
+        return []
+
+    sides_to_fix = [
+        side
+        for side in ("Left", "Right")
+        if force or _has_fk_foot_setup_issue(rig, side)
+    ]
+    if not sides_to_fix:
+        return []
+
+    previous_active = context.active_object
+    previous_mode = rig.mode
+    previous_pose_position = rig.data.pose_position
+    fixed_sides = []
+
+    try:
+        if previous_active is None or previous_active.name != rig.name:
+            _deselect_all_objects()
+            set_active_object(rig.name)
+
+        if rig.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        rig.data.pose_position = "REST"
+        bpy.ops.object.mode_set(mode="EDIT")
+
+        get_src_bone_name = _get_src_bone_name_resolver(rig)
+        for side in sides_to_fix:
+            _side = "_" + side
+            foot_name = get_src_bone_name(side + leg_names["foot"])
+            toe_name = get_src_bone_name(side + leg_names["toes"])
+            c_calf_fk_name = c_prefix + leg_rig_names["calf_fk"] + _side
+            c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
+            foot_fk_name = leg_rig_names["foot_fk"] + _side
+            c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
+
+            foot = get_edit_bone(foot_name)
+            toe = get_edit_bone(toe_name)
+            c_calf_fk = get_edit_bone(c_calf_fk_name)
+            c_foot_fk = get_edit_bone(c_foot_fk_name)
+            foot_fk = get_edit_bone(foot_fk_name)
+            c_toe_fk = get_edit_bone(c_toe_fk_name)
+
+            if not all([foot, toe, c_calf_fk, c_foot_fk, foot_fk, c_toe_fk]):
+                continue
+
+            copy_bone_transforms(foot, c_foot_fk)
+            c_foot_fk.tail[2] = foot.head[2]
+            align_bone_z_axis(c_foot_fk, Vector((0, 0, 1)))
+            c_foot_fk.parent = c_calf_fk
+
+            copy_bone_transforms(foot, foot_fk)
+            foot_fk.parent = c_foot_fk
+
+            copy_bone_transforms(toe, c_toe_fk)
+            c_toe_fk.parent = foot_fk
+
+            fixed_sides.append(side)
+    finally:
+        if rig.mode != "POSE":
+            bpy.ops.object.mode_set(mode="POSE")
+        rig.data.pose_position = previous_pose_position
+
+    if fixed_sides:
+        _refresh_control_rig_setup(rig)
+
+    if previous_mode != "POSE":
+        try:
+            bpy.ops.object.mode_set(mode=previous_mode)
+        except Exception:
+            pass
+
+    if previous_active and previous_active.name != rig.name:
+        try:
+            _deselect_all_objects()
+            set_active_object(previous_active.name)
+            if previous_mode != "OBJECT":
+                bpy.ops.object.mode_set(mode=previous_mode)
+        except Exception:
+            pass
+
+    return fixed_sides
+
+
 # OPERATOR CLASSES
 ##################
 class MR_OT_update(bpy.types.Operator):  # noqa: N801
@@ -235,6 +392,39 @@ class MR_OT_reconnect_rig(bpy.types.Operator):  # noqa: N801
 
         try:
             _reconnect_rig_constraints(context)
+        finally:
+            context.preferences.edit.use_global_undo = use_global_undo
+
+        return {"FINISHED"}
+
+
+class MR_OT_fix_fk_foot_setup(bpy.types.Operator):  # noqa: N801
+    """Repair the legacy FK foot helper setup on an existing control rig"""
+
+    bl_idname = "mr.fix_fk_foot_setup"
+    bl_label = "fix_fk_foot_setup"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        if obj and obj.type == "ARMATURE":
+            return "mr_control_rig" in obj.data.keys()
+        return False
+
+    def execute(self, context):
+        use_global_undo = context.preferences.edit.use_global_undo
+        context.preferences.edit.use_global_undo = False
+
+        try:
+            fixed_sides = _repair_fk_foot_setup(context)
+            if fixed_sides:
+                self.report(
+                    {"INFO"},
+                    "Fixed FK foot setup for " + ", ".join(fixed_sides),
+                )
+            else:
+                self.report({"INFO"}, "FK foot setup already matches legacy rig")
         finally:
             context.preferences.edit.use_global_undo = use_global_undo
 
@@ -433,6 +623,7 @@ class MR_OT_make_rig(bpy.types.Operator):  # noqa: N801
 
             # build control rig
             _make_rig(self, context)
+            _repair_fk_foot_setup(context, arm)
 
             if blender_version._float < 291:
                 # Child Of constraints inverse matrix must be set manually
@@ -2265,7 +2456,7 @@ def _make_rig(self, context):
         c_toe_fk_name = c_prefix + leg_rig_names["toes_fk"] + _side
         c_toe_fk = create_edit_bone(c_toe_fk_name)
         copy_bone_transforms(toe, c_toe_fk)
-        c_toe_fk.parent = c_foot_fk
+        c_toe_fk.parent = foot_fk
         set_bone_collection(rig, c_toe_fk, coll_ctrl_name)
 
         # Toe Track
@@ -2290,13 +2481,6 @@ def _make_rig(self, context):
         toe_02.head = toe_02.head + (toe_02.tail - toe_02.head) * 0.5
         toe_02.parent = toe_01_ik
         set_bone_collection(rig, toe_02, coll_intern_name)
-
-        # Foot FK Ctrl
-        c_foot_fk_name = c_prefix + leg_rig_names["foot_fk"] + _side
-        c_foot_fk = create_edit_bone(c_foot_fk_name)
-        copy_bone_transforms(foot, c_foot_fk)
-        c_foot_fk.parent = c_calf_fk
-        set_bone_collection(rig, c_foot_fk, coll_ctrl_name)
 
         # Foot Roll Cursor Ctrl
         c_foot_roll_cursor_name = c_prefix + leg_rig_names["foot_roll_cursor"] + _side
@@ -4437,6 +4621,10 @@ class MR_PT_MenuUpdate(Panel, MixamoRigPanel):  # noqa: N801
     def draw(self, context):
         layt = self.layout
         layt.operator(MR_OT_update.bl_idname, text="Update Control Rig")
+        if _control_rig_needs_fk_foot_fix(context.active_object):
+            col = layt.column(align=True)
+            col.alert = True
+            col.operator(MR_OT_fix_fk_foot_setup.bl_idname, text="Fix FK Foot Setup")
 
 
 class MR_PT_MenuExport(Panel, MixamoRigPanel):  # noqa: N801
@@ -4462,6 +4650,7 @@ classes = (
     MR_OT_bake_anim,
     MR_OT_import_anim,
     MR_OT_reconnect_rig,
+    MR_OT_fix_fk_foot_setup,
     MR_OT_edit_custom_shape,
     MR_OT_apply_shape,
     MR_OT_exportGLTF,

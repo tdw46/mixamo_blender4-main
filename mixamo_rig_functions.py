@@ -284,6 +284,11 @@ class MR_OT_switch_snap_anim(bpy.types.Operator):  # noqa: N801
                     bake_ik_to_fk_arm(self)
 
             elif self.type == "LEG":
+                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
+
+                if _control_rig_needs_fk_foot_fix(self.rig):
+                    _repair_fk_foot_setup(context, self.rig)
+
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
                 )  # get_pose_bone(self.prefix+self.side+'Foot')
@@ -314,6 +319,7 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
     _side = ""
     prefix: bpy.props.StringProperty(name="", default="")
     type: bpy.props.StringProperty(name="type", default="")
+    force_keyframes = False
 
     @classmethod
     def poll(cls, context):
@@ -325,10 +331,12 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
 
         try:
             self.rig = context.active_object
+            self.force_keyframes = True
             bname = get_selected_pbone_name()
             self.side = get_bone_side(bname)
             self._side = "_" + self.side
             self.prefix = get_mixamo_prefix()
+            prev_frame = context.scene.frame_current - 1
 
             if is_selected(fk_leg, bname) or is_selected(ik_leg, bname):
                 self.type = "LEG"
@@ -341,18 +349,27 @@ class MR_OT_switch_snap(bpy.types.Operator):  # noqa: N801
                     c_prefix + arm_rig_names["hand_ik"] + self._side
                 )  # self.prefix+self.side+'Hand')
                 if c_hand_ik["ik_fk_switch"] < 0.5:
+                    insert_arm_ik_keys(self._side, prev_frame)
                     fk_to_ik_arm(self)
                 else:
+                    insert_arm_fk_keys(self._side, prev_frame)
                     ik_to_fk_arm(self)
 
             elif self.type == "LEG":
+                from .mixamo_rig import _control_rig_needs_fk_foot_fix, _repair_fk_foot_setup
+
+                if _control_rig_needs_fk_foot_fix(self.rig):
+                    _repair_fk_foot_setup(context, self.rig)
+
                 # base_foot = get_pose_bone(self.prefix+self.side+'Foot')
                 c_foot_ik = get_pose_bone(
                     c_prefix + leg_rig_names["foot_ik"] + self._side
                 )  # get_pose_bone(self.prefix+self.side+'Foot')
                 if c_foot_ik["ik_fk_switch"] < 0.5:
+                    insert_leg_ik_keys(self._side, prev_frame)
                     fk_to_ik_leg(self)
                 else:
+                    insert_leg_fk_keys(self._side, prev_frame)
                     ik_to_fk_leg(self)
 
         finally:
@@ -648,6 +665,83 @@ def snap_rot(pose_bone, target_bone):
         bpy.context.view_layer.update()
 
 
+def should_insert_switch_keys(operator=None):
+    if operator is not None and getattr(operator, "force_keyframes", False):
+        return True
+    return bpy.context.scene.tool_settings.use_keyframe_insert_auto
+
+
+def insert_bone_key(pose_bone, data_path, frame=None):
+    if pose_bone is None:
+        return
+
+    kwargs = {}
+    if frame is not None:
+        kwargs["frame"] = frame
+    pose_bone.keyframe_insert(data_path=data_path, **kwargs)
+
+
+def insert_arm_ik_keys(_side, frame=None):
+    c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
+    hand_ik = get_pose_bone(ik_arm[2] + _side)
+    pole_ik = get_pose_bone(ik_arm[3] + _side)
+
+    insert_bone_key(c_hand_ik, '["ik_fk_switch"]', frame)
+    insert_bone_key(hand_ik, "location", frame)
+    insert_bone_key(hand_ik, "rotation_euler", frame)
+    insert_bone_key(hand_ik, "scale", frame)
+    insert_bone_key(pole_ik, "location", frame)
+
+
+def insert_arm_fk_keys(_side, frame=None):
+    arm_fk = get_pose_bone(fk_arm[0] + _side)
+    forearm_fk = get_pose_bone(fk_arm[1] + _side)
+    hand_fk = get_pose_bone(fk_arm[2] + _side)
+    c_hand_ik = get_pose_bone(c_prefix + arm_rig_names["hand_ik"] + _side)
+
+    insert_bone_key(c_hand_ik, '["ik_fk_switch"]', frame)
+    insert_bone_key(hand_fk, "location", frame)
+    insert_bone_key(hand_fk, "rotation_euler", frame)
+    insert_bone_key(hand_fk, "scale", frame)
+    insert_bone_key(arm_fk, "rotation_euler", frame)
+    insert_bone_key(forearm_fk, "rotation_euler", frame)
+
+
+def insert_leg_ik_keys(_side, frame=None):
+    c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
+    foot_ik = get_pose_bone(ik_leg[2] + _side)
+    pole_ik = get_pose_bone(ik_leg[3] + _side)
+    toes_ik = get_pose_bone(ik_leg[4] + _side)
+    foot_01_ik = get_pose_bone(ik_leg[5] + _side)
+    foot_roll_ik = get_pose_bone(ik_leg[6] + _side)
+
+    insert_bone_key(c_foot_ik, '["ik_fk_switch"]', frame)
+    insert_bone_key(foot_01_ik, "rotation_euler", frame)
+    insert_bone_key(foot_roll_ik, "location", frame)
+    insert_bone_key(foot_ik, "location", frame)
+    insert_bone_key(foot_ik, "rotation_euler", frame)
+    insert_bone_key(foot_ik, "scale", frame)
+    insert_bone_key(toes_ik, "rotation_euler", frame)
+    insert_bone_key(toes_ik, "scale", frame)
+    insert_bone_key(pole_ik, "location", frame)
+
+
+def insert_leg_fk_keys(_side, frame=None):
+    thigh_fk = get_pose_bone(fk_leg[0] + _side)
+    leg_fk = get_pose_bone(fk_leg[1] + _side)
+    foot_fk = get_pose_bone(fk_leg[2] + _side)
+    toes_fk = get_pose_bone(fk_leg[3] + _side)
+    c_foot_ik = get_pose_bone(c_prefix + leg_rig_names["foot_ik"] + _side)
+
+    insert_bone_key(c_foot_ik, '["ik_fk_switch"]', frame)
+    insert_bone_key(thigh_fk, "rotation_euler", frame)
+    insert_bone_key(leg_fk, "rotation_euler", frame)
+    insert_bone_key(foot_fk, "rotation_euler", frame)
+    insert_bone_key(foot_fk, "scale", frame)
+    insert_bone_key(toes_fk, "rotation_euler", frame)
+    insert_bone_key(toes_fk, "scale", frame)
+
+
 def bake_fk_to_ik_arm(self):
     for f in range(self.frame_start, self.frame_end + 1):
         bpy.context.scene.frame_set(f)
@@ -689,19 +783,9 @@ def fk_to_ik_arm(self):  # noqa: F841
     bpy.context.view_layer.update()
 
     # insert key if autokey enable
-    if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        # fk chain
-        c_hand_ik.keyframe_insert(data_path='["ik_fk_switch"]')
-        hand_fk.keyframe_insert(data_path="scale")
-        hand_fk.keyframe_insert(data_path="rotation_euler")
-        arm_fk.keyframe_insert(data_path="rotation_euler")
-        forearm_fk.keyframe_insert(data_path="rotation_euler")
-
-        # ik chain
-        hand_ik.keyframe_insert(data_path="location")
-        hand_ik.keyframe_insert(data_path="rotation_euler")
-        hand_ik.keyframe_insert(data_path="scale")
-        pole.keyframe_insert(data_path="location")
+    if should_insert_switch_keys(self):
+        insert_arm_fk_keys(_side)
+        insert_arm_ik_keys(_side)
 
     # change FK to IK hand selection, if selected
     if is_pose_bone_selected(hand_ik):
@@ -784,20 +868,9 @@ def ik_to_fk_arm(self):
     update_transform()
 
     # insert key if autokey enable
-    if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        # ik chain
-        c_hand_ik.keyframe_insert(data_path='["ik_fk_switch"]')
-        hand_ik.keyframe_insert(data_path="location")
-        hand_ik.keyframe_insert(data_path="rotation_euler")
-        hand_ik.keyframe_insert(data_path="scale")
-        pole_ik.keyframe_insert(data_path="location")
-
-        # fk chain
-        hand_fk.keyframe_insert(data_path="location")
-        hand_fk.keyframe_insert(data_path="rotation_euler")
-        hand_fk.keyframe_insert(data_path="scale")
-        arm_fk.keyframe_insert(data_path="rotation_euler")
-        forearm_fk.keyframe_insert(data_path="rotation_euler")
+    if should_insert_switch_keys(self):
+        insert_arm_ik_keys(_side)
+        insert_arm_fk_keys(_side)
 
     # change FK to IK hand selection, if selected
     if is_pose_bone_selected(hand_fk):
@@ -862,25 +935,9 @@ def fk_to_ik_leg(self):  # noqa: F841
     #    print(br)
 
     # insert key if autokey enable
-    if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        # fk chain
-        c_foot_ik.keyframe_insert(data_path='["ik_fk_switch"]')
-        thigh_fk.keyframe_insert(data_path="rotation_euler")
-        leg_fk.keyframe_insert(data_path="rotation_euler")
-        foot_fk.keyframe_insert(data_path="rotation_euler")
-        foot_fk.keyframe_insert(data_path="scale")
-        toes_fk.keyframe_insert(data_path="rotation_euler")
-        toes_fk.keyframe_insert(data_path="scale")
-
-        # ik chain
-        foot_ik.keyframe_insert(data_path="location")
-        foot_ik.keyframe_insert(data_path="rotation_euler")
-        foot_ik.keyframe_insert(data_path="scale")
-        foot_01_ik.keyframe_insert(data_path="rotation_euler")
-        foot_roll_ik.keyframe_insert(data_path="location")
-        toes_ik.keyframe_insert(data_path="rotation_euler")
-        toes_ik.keyframe_insert(data_path="scale")
-        pole_ik.keyframe_insert(data_path="location")
+    if should_insert_switch_keys(self):
+        insert_leg_fk_keys(_side)
+        insert_leg_ik_keys(_side)
 
     # change IK to FK foot selection, if selected
     if is_pose_bone_selected(foot_ik):
@@ -982,25 +1039,9 @@ def ik_to_fk_leg(self):  # noqa: F841
     update_transform()
 
     # insert key if autokey enable
-    if bpy.context.scene.tool_settings.use_keyframe_insert_auto:
-        # ik chain
-        c_foot_ik.keyframe_insert(data_path='["ik_fk_switch"]')
-        foot_01_ik.keyframe_insert(data_path="rotation_euler")
-        foot_roll_ik.keyframe_insert(data_path="location")
-        foot_ik.keyframe_insert(data_path="location")
-        foot_ik.keyframe_insert(data_path="rotation_euler")
-        foot_ik.keyframe_insert(data_path="scale")
-        toes_ik.keyframe_insert(data_path="rotation_euler")
-        toes_ik.keyframe_insert(data_path="scale")
-        pole_ik.keyframe_insert(data_path="location")
-
-        # fk chain
-        thigh_fk.keyframe_insert(data_path="rotation_euler")
-        leg_fk.keyframe_insert(data_path="rotation_euler")
-        foot_fk.keyframe_insert(data_path="rotation_euler")
-        foot_fk.keyframe_insert(data_path="scale")
-        toes_fk.keyframe_insert(data_path="rotation_euler")
-        toes_fk.keyframe_insert(data_path="scale")
+    if should_insert_switch_keys(self):
+        insert_leg_ik_keys(_side)
+        insert_leg_fk_keys(_side)
 
     # change IK to FK foot selection, if selected
     if is_pose_bone_selected(foot_fk):
