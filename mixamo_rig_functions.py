@@ -63,6 +63,7 @@ AUTO_SNAP_CTRL_NAMES = (
 )
 _auto_snap_state = {}
 _auto_snap_running = False
+_keying_warning_seen = set()
 
 ################## OPERATOR CLASSES ###################
 
@@ -899,6 +900,8 @@ def auto_snap_ik_fk_slider_handler(scene, depsgraph):
     if "mr_control_rig" not in rig.data.keys():
         return
 
+    queue_keying_warning(context)
+
     pose = getattr(rig, "pose", None)
     if pose is None:
         return
@@ -1327,6 +1330,118 @@ def is_selected_prop(pbone, prop_name):
 
 
 ################## User Interface ##################
+def uses_visual_keying(context):
+    """Constrained controls must key local channels, not the evaluated pose."""
+    keying_set = context.scene.keying_sets_all.active
+    return bool(
+        getattr(context.preferences.edit, "use_visual_keying", False)
+        or (keying_set and getattr(keying_set, "use_insertkey_visual", False))
+    )
+
+
+def keying_warning_rig(context):
+    rig = context.active_object
+    if context.mode == "POSE" and rig is not None and rig.type == "ARMATURE":
+        if "mr_control_rig" in rig.data:
+            return rig
+    return None
+
+
+def draw_keying_warning(menu, context):
+    layout = menu.layout
+    layout.label(text="Visual Keying can make IK poles jump after keying.")
+    layout.label(text="Use local transforms to preserve your control poses.")
+    layout.separator()
+    layout.label(text="The fix changes Blender's animation preference")
+    layout.label(text="and selects Location & Rotation for this scene.")
+    layout.label(text="Existing keys are unchanged; re-key affected poses.")
+    layout.operator(
+        MR_OT_use_local_keying.bl_idname, text="Fix Keying Settings", icon="KEY_HLT"
+    )
+
+
+def show_keying_warning():
+    # Resolve context again: the user may have switched objects/files since scheduling.
+    context = bpy.context
+    rig = keying_warning_rig(context)
+    if rig is None or not uses_visual_keying(context) or context.window is None:
+        return None
+    if context.screen and context.screen.is_animation_playing:
+        return None
+    # Do not interrupt an active transform; a later depsgraph update can retry.
+    if getattr(context.window, "modal_operators", ()):
+        return None
+    key = (context.scene.as_pointer(), rig.as_pointer())
+    if key not in _keying_warning_seen:
+        context.window_manager.popup_menu(
+            draw_keying_warning, title="Mixamo Rig: Visual Keying Warning", icon="ERROR"
+        )
+        _keying_warning_seen.add(key)
+    return None
+
+
+def queue_keying_warning(context):
+    if bpy.app.background or context.window is None:
+        return
+    if context.screen and context.screen.is_animation_playing:
+        return
+    if getattr(context.window, "modal_operators", ()):
+        return
+    rig = keying_warning_rig(context)
+    if rig is None:
+        return
+    key = (context.scene.as_pointer(), rig.as_pointer())
+    if not uses_visual_keying(context):
+        _keying_warning_seen.discard(key)
+        return
+    if key not in _keying_warning_seen and not bpy.app.timers.is_registered(
+        show_keying_warning
+    ):
+        bpy.app.timers.register(show_keying_warning, first_interval=0.1)
+
+
+@persistent
+def reset_keying_warnings(_unused):
+    _keying_warning_seen.clear()
+    if bpy.app.timers.is_registered(show_keying_warning):
+        bpy.app.timers.unregister(show_keying_warning)
+
+
+class MR_OT_use_local_keying(bpy.types.Operator):
+    """Disable Visual Keying in animation preferences and select Location & Rotation.
+
+    This affects keying throughout Blender; existing keys are not rewritten.
+    """
+
+    bl_idname = "pose.mr_use_local_keying"
+    bl_label = "Use Local Transform Keying"
+
+    @classmethod
+    def poll(cls, context):
+        rig = context.active_object
+        return (
+            rig is not None and rig.type == "ARMATURE" and "mr_control_rig" in rig.data
+        )
+
+    def execute(self, context):
+        keying_sets = context.scene.keying_sets_all
+        # Resolve by identifier, independent of the translated UI label.
+        local_set = next(
+            (ks for ks in keying_sets if ks.bl_idname == "BUILTIN_KSI_LocRot"),
+            None,
+        )
+        if local_set is None or not hasattr(
+            context.preferences.edit, "use_visual_keying"
+        ):
+            self.report({"ERROR"}, "Location & Rotation keying is unavailable")
+            return {"CANCELLED"}
+        context.preferences.edit.use_visual_keying = False
+        keying_sets.active = local_set
+        _keying_warning_seen.clear()
+        self.report({"INFO"}, "Visual Keying disabled; re-key any affected poses")
+        return {"FINISHED"}
+
+
 class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -1355,6 +1470,12 @@ class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
                 return
         else:
             return
+
+        if uses_visual_keying(context):
+            box = layout.box()
+            box.label(text="Visual Keying can shift IK poles", icon="ERROR")
+            box.label(text="Disable it in animation preferences")
+            box.operator(MR_OT_use_local_keying.bl_idname)
 
         pose_bones = rig.pose.bones  # noqa: F841
 
@@ -1399,6 +1520,7 @@ class MR_PT_rig_ui(bpy.types.Panel):  # noqa: N801
 
 ##################  REGISTER  ##################
 classes = (
+    MR_OT_use_local_keying,
     MR_OT_arm_bake_fk_to_ik,
     MR_OT_arm_fk_to_ik,
     MR_OT_arm_bake_ik_to_fk,
@@ -1441,6 +1563,8 @@ def register():
 
     if auto_snap_ik_fk_slider_handler not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(auto_snap_ik_fk_slider_handler)
+    if reset_keying_warnings not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(reset_keying_warnings)
 
 
 def unregister():
@@ -1450,6 +1574,9 @@ def unregister():
         bpy.app.handlers.depsgraph_update_post.remove(auto_snap_ik_fk_slider_handler)
 
     _auto_snap_state.clear()
+    reset_keying_warnings(None)
+    if reset_keying_warnings in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(reset_keying_warnings)
 
     for cls in classes:
         unregister_class(cls)

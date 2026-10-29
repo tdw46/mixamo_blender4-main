@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "mixamo_rig"
-version = "1.2.2"
+version = "1.2.3"
 name = "Mixamo Rig"
 tagline = "Generate a control rig from Mixamo Fbx skeleton"
 maintainer = "BeyondDev (Tyler Walker) <tyler@beyondstudios.us>"
@@ -24,8 +24,10 @@ copyright = [
 # Build configuration to exclude unnecessary files
 [build]
 paths_exclude_pattern = [
+  "/tests/",
   "__pycache__/",
   ".mypy_cache/",
+  ".ruff_cache/",
   "/.git/",
   "/.github/",
   ".gitignore",
